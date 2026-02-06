@@ -1,5 +1,7 @@
 # Sentinel-SDK
 
+**Upstream repo:** [github.com/yashy10/Sentinel-SDK](https://github.com/yashy10/Sentinel-SDK)
+
 A self-correcting security harness for AI coding agents. It intercepts every tool call an LLM proposes, validates it against static rules and dynamically learned constraints, and either allows execution, blocks it, or triggers a learning loop so the agent **never makes the same mistake twice**.
 
 ## How It Works
