@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sentinel-SDK — Security Dashboard</title>
+<style>
+  :root {
+    --bg-primary: #0a0e17;
+    --bg-secondary: #111827;
+    --bg-card: #1a2332;
+    --bg-card-hover: #1f2b3d;
+    --border: #2a3a4e;
+    --text-primary: #e2e8f0;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --accent-green: #22c55e;
+    --accent-green-bg: rgba(34, 197, 94, 0.1);
+    --accent-red: #ef4444;
+    --accent-red-bg: rgba(239, 68, 68, 0.1);
+    --accent-yellow: #f59e0b;
+    --accent-yellow-bg: rgba(245, 158, 11, 0.1);
+    --accent-blue: #3b82f6;
+    --accent-blue-bg: rgba(59, 130, 246, 0.1);
+    --accent-purple: #a855f7;
+    --accent-purple-bg: rgba(168, 85, 247, 0.1);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .header {
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-card) 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo {
+    font-size: 24px;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.5px;
+  }
+
+  .logo-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .pulse-dot {
+    width: 8px; height: 8px;
+    background: var(--accent-green);
+    border-radius: 50%;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+    50% { opacity: 0.8; box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+  }
+
+  .live-text {
+    font-size: 12px;
+    color: var(--accent-green);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  /* Stats Bar */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    transition: border-color 0.2s;
+  }
+
+  .stat-card:hover { border-color: var(--accent-blue); }
+
+  .stat-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+
+  .stat-value {
+    font-size: 28px;
+    font-weight: 700;
+  }
+
+  .stat-value.green { color: var(--accent-green); }
+  .stat-value.red { color: var(--accent-red); }
+  .stat-value.yellow { color: var(--accent-yellow); }
+  .stat-value.blue { color: var(--accent-blue); }
+  .stat-value.purple { color: var(--accent-purple); }
+
+  .stat-change {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Main Content */
+  .main-content {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 0;
+    height: calc(100vh - 160px);
+  }
+
+  /* Audit Log Panel */
+  .panel {
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .panel:last-child { border-right: none; }
+
+  .panel-header {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-secondary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-secondary);
+  }
+
+  .panel-count {
+    background: var(--bg-card);
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+
+  .panel-body::-webkit-scrollbar { width: 6px; }
+  .panel-body::-webkit-scrollbar-track { background: var(--bg-primary); }
+  .panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Event Cards */
+  .event-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 6px;
+    transition: all 0.15s;
+    cursor: default;
+    border-left: 3px solid transparent;
+  }
+
+  .event-card:hover { background: var(--bg-card-hover); }
+  .event-card.safe { border-left-color: var(--accent-green); }
+  .event-card.blocked { border-left-color: var(--accent-red); }
+  .event-card.pending { border-left-color: var(--accent-yellow); }
+  .event-card.learned { border-left-color: var(--accent-blue); }
+  .event-card.sanitized { border-left-color: var(--accent-purple); }
+
+  .event-card.blocked-flash {
+    animation: block-flash 0.6s ease-out;
+  }
+
+  @keyframes block-flash {
+    0% { background: rgba(239, 68, 68, 0.3); }
+    100% { background: var(--bg-card); }
+  }
+
+  .event-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+
+  .event-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .event-status.safe { background: var(--accent-green-bg); color: var(--accent-green); }
+  .event-status.blocked { background: var(--accent-red-bg); color: var(--accent-red); }
+  .event-status.pending { background: var(--accent-yellow-bg); color: var(--accent-yellow); }
+  .event-status.learned { background: var(--accent-blue-bg); color: var(--accent-blue); }
+  .event-status.executed { background: var(--accent-green-bg); color: var(--accent-green); }
+  .event-status.sanitized { background: var(--accent-purple-bg); color: var(--accent-purple); }
+
+  .event-time {
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  .event-tool {
+    font-size: 12px;
+    color: var(--accent-blue);
+    font-weight: 600;
+  }
+
+  .event-input {
+    font-size: 11px;
+    color: var(--text-secondary);
+    background: rgba(0,0,0,0.2);
+    padding: 4px 8px;
+    border-radius: 4px;
+    margin: 4px 0;
+    word-break: break-all;
+    max-height: 60px;
+    overflow: hidden;
+  }
+
+  .event-reason {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  .event-enforcement {
+    font-size: 10px;
+    font-weight: 600;
+    margin-left: 8px;
+  }
+
+  /* Constraint Cards */
+  .constraint-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin-bottom: 8px;
+    border-left: 3px solid var(--accent-blue);
+  }
+
+  .constraint-id {
+    font-size: 10px;
+    color: var(--accent-blue);
+    font-weight: 700;
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .constraint-rule {
+    font-size: 12px;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    line-height: 1.4;
+  }
+
+  .constraint-injection {
+    font-size: 11px;
+    color: var(--accent-yellow);
+    background: rgba(245, 158, 11, 0.08);
+    padding: 8px 10px;
+    border-radius: 4px;
+    line-height: 1.4;
+    margin-bottom: 8px;
+  }
+
+  .constraint-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  .constraint-badge {
+    background: var(--bg-primary);
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  /* Security Score */
+  .score-section {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+    text-align: center;
+  }
+
+  .score-ring {
+    position: relative;
+    width: 100px;
+    height: 100px;
+    margin: 0 auto 8px;
+  }
+
+  .score-ring svg {
+    transform: rotate(-90deg);
+    width: 100px;
+    height: 100px;
+  }
+
+  .score-ring .ring-bg {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 8;
+  }
+
+  .score-ring .ring-fill {
+    fill: none;
+    stroke-width: 8;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.5s ease, stroke 0.3s;
+  }
+
+  .score-number {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 24px;
+    font-weight: 800;
+  }
+
+  .score-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    color: var(--text-muted);
+    font-size: 13px;
+    text-align: center;
+    gap: 8px;
+  }
+
+  .empty-icon { font-size: 32px; opacity: 0.3; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div>
+      <div class="logo">SENTINEL-SDK</div>
+      <div class="logo-sub">Security Operations Dashboard</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="pulse-dot"></div>
+    <span class="live-text">Live</span>
+    <span style="color: var(--text-muted); font-size: 11px;" id="lastUpdate">--</span>
+  </div>
+</div>
+
+<div class="stats-bar">
+  <div class="stat-card">
+    <div class="stat-label">Total Events</div>
+    <div class="stat-value" id="statTotal">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Blocked</div>
+    <div class="stat-value red" id="statBlocked">0</div>
+    <div class="stat-change" id="statBlockRate">0% block rate</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Allowed</div>
+    <div class="stat-value green" id="statAllowed">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Constraints Learned</div>
+    <div class="stat-value blue" id="statLearned">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Sessions</div>
+    <div class="stat-value purple" id="statSessions">0</div>
+  </div>
+</div>
+
+<div class="main-content">
+  <!-- Audit Log Panel -->
+  <div class="panel">
+    <div class="panel-header">
+      <span>Audit Log</span>
+      <span class="panel-count" id="auditCount">0 events</span>
+    </div>
+    <div class="panel-body" id="auditLog">
+      <div class="empty-state">
+        <div class="empty-icon">&#x1f6e1;</div>
+        <div>Waiting for agent activity...</div>
+        <div style="font-size: 11px;">Events will appear here in real-time</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Constraints + Score Panel -->
+  <div class="panel">
+    <div class="score-section">
+      <div class="score-ring">
+        <svg viewBox="0 0 100 100">
+          <circle class="ring-bg" cx="50" cy="50" r="42"/>
+          <circle class="ring-fill" id="scoreRing" cx="50" cy="50" r="42"
+                  stroke-dasharray="264" stroke-dashoffset="264"
+                  stroke="var(--accent-green)"/>
+        </svg>
+        <div class="score-number" id="scoreNumber">--</div>
+      </div>
+      <div class="score-label">Security Score</div>
+    </div>
+    <div class="panel-header">
+      <span>Learned Constraints</span>
+      <span class="panel-count" id="constraintCount">0 active</span>
+    </div>
+    <div class="panel-body" id="constraintList">
+      <div class="empty-state">
+        <div class="empty-icon">&#x1f9e0;</div>
+        <div>No constraints learned yet</div>
+        <div style="font-size: 11px;">The system will learn from blocked actions</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE = window.location.origin;
+let previousAuditCount = 0;
+
+function formatTime(ts) {
+  try {
+    const d = new Date(ts);
+    return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch { return '--:--:--'; }
+}
+
+function getStatusClass(status) {
+  const s = (status || '').toUpperCase();
+  if (s === 'SAFE' || s === 'EXECUTED') return 'safe';
+  if (s === 'BLOCKED' || s === 'UNSAFE') return 'blocked';
+  if (s === 'LEARNED') return 'learned';
+  if (s === 'SANITIZED_EXECUTED') return 'sanitized';
+  return 'pending';
+}
+
+function getStatusLabel(status, enforcement) {
+  const s = (status || '').toUpperCase();
+  if (s === 'SAFE' || s === 'EXECUTED') return 'ALLOWED';
+  if (s === 'LEARNED') return 'LEARNED';
+  if (s === 'SANITIZED_EXECUTED') return 'SANITIZED';
+  if (s === 'BLOCKED' || s === 'UNSAFE') return enforcement || 'BLOCKED';
+  return status;
+}
+
+function truncate(str, len) {
+  if (!str) return '';
+  str = typeof str === 'object' ? JSON.stringify(str) : String(str);
+  return str.length > len ? str.substring(0, len) + '...' : str;
+}
+
+function renderAuditLog(events) {
+  const container = document.getElementById('auditLog');
+  if (!events || events.length === 0) return;
+
+  const isNew = events.length > previousAuditCount;
+  previousAuditCount = events.length;
+
+  const reversed = [...events].reverse();
+  container.innerHTML = reversed.map((evt, i) => {
+    const cls = getStatusClass(evt.status);
+    const flash = isNew && i === 0 && cls === 'blocked' ? ' blocked-flash' : '';
+    const inputStr = typeof evt.tool_input === 'object'
+      ? JSON.stringify(evt.tool_input)
+      : String(evt.tool_input || '');
+
+    return `
+      <div class="event-card ${cls}${flash}">
+        <div class="event-row">
+          <span class="event-status ${cls}">${getStatusLabel(evt.status, evt.enforcement)}</span>
+          <span class="event-time">${formatTime(evt.timestamp)}</span>
+        </div>
+        <div class="event-row">
+          <span class="event-tool">${evt.tool_name || 'unknown'}</span>
+          <span class="event-enforcement">${evt.enforcement !== 'NONE' ? evt.enforcement : ''}</span>
+        </div>
+        <div class="event-input">${truncate(inputStr, 120)}</div>
+        <div class="event-reason">${truncate(evt.risk_reason, 100)}</div>
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('auditCount').textContent = `${events.length} events`;
+}
+
+function renderConstraints(constraints) {
+  const container = document.getElementById('constraintList');
+  if (!constraints || constraints.length === 0) return;
+
+  container.innerHTML = constraints.map(c => `
+    <div class="constraint-card">
+      <div class="constraint-id">
+        <span>${c.id}</span>
+        <span>${c.category || 'unknown'}</span>
+      </div>
+      <div class="constraint-rule">${c.learned_rule || ''}</div>
+      <div class="constraint-injection">${c.injection_text || ''}</div>
+      <div class="constraint-meta">
+        <span class="constraint-badge">Confidence: ${((c.confidence || 0) * 100).toFixed(0)}%</span>
+        <span class="constraint-badge">Enforced: ${c.times_enforced || 0}x</span>
+        <span class="constraint-badge">${formatTime(c.created_at)}</span>
+      </div>
+    </div>
+  `).join('');
+
+  document.getElementById('constraintCount').textContent = `${constraints.length} active`;
+}
+
+function updateStats(events, constraints) {
+  const total = events.length;
+  const blocked = events.filter(e =>
+    ['BLOCKED', 'UNSAFE'].includes((e.status || '').toUpperCase())
+  ).length;
+  const allowed = events.filter(e =>
+    ['SAFE', 'EXECUTED', 'SANITIZED_EXECUTED'].includes((e.status || '').toUpperCase())
+  ).length;
+  const learned = events.filter(e =>
+    (e.status || '').toUpperCase() === 'LEARNED'
+  ).length;
+  const sessions = new Set(events.map(e => e.session_id).filter(Boolean)).size;
+
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statBlocked').textContent = blocked;
+  document.getElementById('statAllowed').textContent = allowed;
+  document.getElementById('statLearned').textContent = constraints.length;
+  document.getElementById('statSessions').textContent = sessions;
+
+  const blockRate = total > 0 ? ((blocked / total) * 100).toFixed(1) : 0;
+  document.getElementById('statBlockRate').textContent = `${blockRate}% block rate`;
+
+  // Security Score: starts at 50, improves with constraints, penalized by blocks
+  const constraintBonus = Math.min(constraints.length * 10, 40);
+  const blockPenalty = total > 0 ? Math.min((blocked / total) * 20, 20) : 0;
+  const score = Math.round(Math.min(50 + constraintBonus - blockPenalty, 100));
+
+  document.getElementById('scoreNumber').textContent = score;
+
+  const circumference = 264;
+  const offset = circumference - (score / 100) * circumference;
+  const ring = document.getElementById('scoreRing');
+  ring.style.strokeDashoffset = offset;
+
+  if (score >= 80) ring.style.stroke = 'var(--accent-green)';
+  else if (score >= 60) ring.style.stroke = 'var(--accent-yellow)';
+  else ring.style.stroke = 'var(--accent-red)';
+
+  document.getElementById('scoreNumber').style.color = ring.style.stroke;
+}
+
+async function poll() {
+  try {
+    const [auditRes, memoryRes] = await Promise.all([
+      fetch(`${API_BASE}/api/audit`),
+      fetch(`${API_BASE}/api/memory`)
+    ]);
+
+    const events = await auditRes.json();
+    const memoryData = await memoryRes.json();
+    const constraints = memoryData.constraints || memoryData || [];
+
+    renderAuditLog(Array.isArray(events) ? events : []);
+    renderConstraints(Array.isArray(constraints) ? constraints : []);
+    updateStats(
+      Array.isArray(events) ? events : [],
+      Array.isArray(constraints) ? constraints : []
+    );
+
+    document.getElementById('lastUpdate').textContent =
+      new Date().toLocaleTimeString('en-US', { hour12: false });
+  } catch (err) {
+    console.warn('Poll error:', err);
+  }
+}
+
+// Poll every 2 seconds
+setInterval(poll, 2000);
+poll();
+</script>
+
+</body>
+</html>
