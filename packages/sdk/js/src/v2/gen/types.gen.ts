@@ -3806,6 +3806,7 @@ export type PermissionReplyData = {
   body?: {
     reply: "once" | "always" | "reject"
     message?: string
+    enforcement?: "KILL" | "USER_INPUT" | "LLM_EXAMINE" | "INVOKE_ACTION"
   }
   path: {
     requestID: string

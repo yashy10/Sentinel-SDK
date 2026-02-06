@@ -88,6 +88,9 @@ export namespace PermissionNext {
   export const Reply = z.enum(["once", "always", "reject"])
   export type Reply = z.infer<typeof Reply>
 
+  export const EnforcementAction = z.enum(["KILL", "USER_INPUT", "LLM_EXAMINE", "INVOKE_ACTION"])
+  export type EnforcementAction = z.infer<typeof EnforcementAction>
+
   export const Approval = z.object({
     projectID: z.string(),
     patterns: z.string().array(),
@@ -101,6 +104,7 @@ export namespace PermissionNext {
         sessionID: z.string(),
         requestID: z.string(),
         reply: Reply,
+        enforcement: EnforcementAction.optional(),
       }),
     ),
   }
@@ -113,7 +117,7 @@ export namespace PermissionNext {
       string,
       {
         info: Request
-        resolve: () => void
+        resolve: (enforcement?: EnforcementAction) => void
         reject: (e: any) => void
       }
     > = {}
@@ -131,6 +135,24 @@ export namespace PermissionNext {
     async (input) => {
       const s = await state()
       const { ruleset, ...request } = input
+      
+      // Special case: bastion_enforcement always requires user input
+      if (request.permission === "bastion_enforcement") {
+        const id = input.id ?? Identifier.ascending("permission")
+        return new Promise<EnforcementAction | undefined>((resolve, reject) => {
+          const info: Request = {
+            id,
+            ...request,
+          }
+          s.pending[id] = {
+            info,
+            resolve: (enforcement) => resolve(enforcement),
+            reject,
+          }
+          Bus.publish(Event.Asked, info)
+        })
+      }
+      
       for (const pattern of request.patterns ?? []) {
         const rule = evaluate(request.permission, pattern, ruleset, s.approved)
         log.info("evaluated", { permission: request.permission, pattern, action: rule })
@@ -138,14 +160,14 @@ export namespace PermissionNext {
           throw new DeniedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
         if (rule.action === "ask") {
           const id = input.id ?? Identifier.ascending("permission")
-          return new Promise<void>((resolve, reject) => {
+          return new Promise<EnforcementAction | undefined>((resolve, reject) => {
             const info: Request = {
               id,
               ...request,
             }
             s.pending[id] = {
               info,
-              resolve,
+              resolve: (enforcement) => resolve(enforcement),
               reject,
             }
             Bus.publish(Event.Asked, info)
@@ -153,6 +175,8 @@ export namespace PermissionNext {
         }
         if (rule.action === "allow") continue
       }
+      // If we get here, all patterns were "allow" - return undefined (no permission needed)
+      return undefined
     },
   )
 
@@ -161,6 +185,7 @@ export namespace PermissionNext {
       requestID: Identifier.schema("permission"),
       reply: Reply,
       message: z.string().optional(),
+      enforcement: EnforcementAction.optional(),
     }),
     async (input) => {
       const s = await state()
@@ -171,6 +196,7 @@ export namespace PermissionNext {
         sessionID: existing.info.sessionID,
         requestID: existing.info.id,
         reply: input.reply,
+        enforcement: input.enforcement,
       })
       if (input.reply === "reject") {
         existing.reject(input.message ? new CorrectedError(input.message) : new RejectedError())
@@ -190,7 +216,7 @@ export namespace PermissionNext {
         return
       }
       if (input.reply === "once") {
-        existing.resolve()
+        existing.resolve(input.enforcement)
         return
       }
       if (input.reply === "always") {
@@ -202,7 +228,7 @@ export namespace PermissionNext {
           })
         }
 
-        existing.resolve()
+        existing.resolve(input.enforcement)
 
         const sessionID = existing.info.sessionID
         for (const [id, pending] of Object.entries(s.pending)) {

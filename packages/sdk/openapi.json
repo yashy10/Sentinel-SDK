@@ -3363,6 +3363,10 @@
                   },
                   "message": {
                     "type": "string"
+                  },
+                  "enforcement": {
+                    "type": "string",
+                    "enum": ["KILL", "USER_INPUT", "LLM_EXAMINE", "INVOKE_ACTION"]
                   }
                 },
                 "required": ["reply"]

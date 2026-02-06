@@ -196,7 +196,11 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
         {(() => {
           const body = (
             <Prompt
-              title="Permission required"
+              title={
+                props.request.permission === "bastion_enforcement"
+                  ? "🚫 Security Action Blocked - Select Enforcement"
+                  : "Permission required"
+              }
               body={
                 <Switch>
                   <Match when={props.request.permission === "edit"}>
@@ -259,15 +263,66 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                   <Match when={props.request.permission === "doom_loop"}>
                     <TextBody icon="⟳" title="Continue after repeated failures" />
                   </Match>
+                  <Match when={props.request.permission === "bastion_enforcement"}>
+                    {(() => {
+                      const meta = props.request.metadata ?? {}
+                      const message = (meta.message as string) ?? ""
+                      const recommended = (meta.recommendedEnforcement as string) ?? "KILL"
+                      const { theme } = useTheme()
+                      return (
+                        <box flexDirection="column" gap={1}>
+                          <box paddingLeft={1}>
+                            <text fg={theme.textMuted}>
+                              {message}
+                            </text>
+                          </box>
+                        </box>
+                      )
+                    })()}
+                  </Match>
                   <Match when={true}>
                     <TextBody icon="⚙" title={`Call tool ` + props.request.permission} />
                   </Match>
                 </Switch>
               }
-              options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
-              escapeKey="reject"
+              options={
+                props.request.permission === "bastion_enforcement"
+                  ? (() => {
+                      const meta = props.request.metadata ?? {}
+                      const recommended = (meta.recommendedEnforcement as string) ?? "KILL"
+                      const isRecommended = (num: string) => {
+                        const map: Record<string, string> = { "1": "KILL", "2": "USER_INPUT", "3": "LLM_EXAMINE", "4": "INVOKE_ACTION" }
+                        return map[num] === recommended
+                      }
+                      return {
+                        "1": isRecommended("1") ? "1. KILL ⭐ (Recommended)" : "1. KILL",
+                        "2": isRecommended("2") ? "2. EXECUTE_ANYWAY ⭐ (Recommended)" : "2. EXECUTE_ANYWAY",
+                        "3": isRecommended("3") ? "3. LLM_EXAMINE ⭐ (Recommended)" : "3. LLM_EXAMINE",
+                        "4": isRecommended("4") ? "4. SAFER_ALTERNATIVE ⭐ (Recommended)" : "4. SAFER_ALTERNATIVE",
+                      }
+                    })()
+                  : { once: "Allow once", always: "Allow always", reject: "Reject" }
+              }
+              escapeKey={(props.request.permission === "bastion_enforcement" ? undefined : "reject") as keyof T | undefined}
               fullscreen
               onSelect={(option) => {
+                if (props.request.permission === "bastion_enforcement") {
+                  const meta = props.request.metadata ?? {}
+                  const recommended = (meta.recommendedEnforcement as string) ?? "KILL"
+                  const enforcementMap: Record<string, "KILL" | "USER_INPUT" | "LLM_EXAMINE" | "INVOKE_ACTION"> = {
+                    "1": "KILL",
+                    "2": "USER_INPUT",
+                    "3": "LLM_EXAMINE",
+                    "4": "INVOKE_ACTION",
+                  }
+                  const selectedEnforcement = enforcementMap[option] ?? recommended
+                  sdk.client.permission.reply({
+                    reply: "once",
+                    requestID: props.request.id,
+                    enforcement: selectedEnforcement,
+                  })
+                  return
+                }
                 if (option === "always") {
                   setStore("stage", "always")
                   return

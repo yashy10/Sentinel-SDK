@@ -1,0 +1,284 @@
+[
+  {
+    "timestamp": "2026-02-06T16:42:56.268Z",
+    "session_id": "ses_3cc2a3efcffev0SPeHHxIK0AOF",
+    "event_id": "evt_34e62ef5",
+    "tool_name": "read",
+    "tool_input": {
+      "filePath": "/Users/yashy/.ssh/id_rsa"
+    },
+    "status": "UNSAFE",
+    "enforcement": "KILL",
+    "risk_reason": "Bastion rule 'block_env_access': Prevent reading secret/configuration files",
+    "rule_matched": "R001",
+    "sanitized_command": null,
+    "execution_result": null,
+    "retry_number": 0,
+    "user_request": ""
+  },
+  {
+    "timestamp": "2026-02-06T17:43:48.845Z",
+    "session_id": "ses_3cbf281eeffeHfgslzilKR8ODW",
+    "event_id": "evt_57cb4545",
+    "tool_name": "read",
+    "tool_input": {
+      "filePath": "/Users/yashy/.ssh/id_rsa"
+    },
+    "status": "UNSAFE",
+    "enforcement": "KILL",
+    "risk_reason": "Bastion rule 'block_env_access': Prevent reading secret/configuration files",
+    "rule_matched": "R001",
+    "sanitized_command": null,
+    "execution_result": null,
+    "retry_number": 0,
+    "user_request": ""
+  },
+  {
+    "timestamp": "2026-02-06T17:46:06.758Z",
+    "session_id": "ses_3cbf06cacffeH8Mx3GWW1lKoh1",
+    "event_id": "evt_4866990b",
+    "tool_name": "read",
+    "tool_input": {
+      "filePath": "/Users/yashy/.ssh/id_rsa"
+    },
+    "status": "BLOCKED",
+    "enforcement": "KILL",
+    "risk_reason": "Bastion rule 'block_env_access': Prevent reading secret/configuration files",
+    "rule_matched": "R001",
+    "sanitized_command": null,
+    "execution_result": null,
+    "retry_number": 0,
+    "user_request": ""
+  },
+  {
+    "timestamp": "2026-02-06T17:49:32.139Z",
+    "session_id": "ses_3cbed4cecffeM17TPuQxEYYWDP",
+    "event_id": "evt_67cf72cb",
+    "tool_name": "read",
+    "tool_input": {
+      "filePath": "/Users/yashy/.ssh/id_rsa"
+    },
+    "status": "BLOCKED",
+    "enforcement": "KILL",
+    "risk_reason": "Bastion rule 'block_env_access': Prevent reading secret/configuration files",
+    "rule_matched": "R001",
+    "sanitized_command": null,
+    "execution_result": null,
+    "retry_number": 0,
+    "user_request": ""
+  },
+  {
+    "timestamp": "2026-02-06T17:54:26.300Z",
+    "session_id": "ses_3cbe8c64cffe2L2zsHIJ6FNpFL",
+    "event_id": "evt_52493ec4",
+    "tool_name": "read",
+    "tool_input": {
+      "filePath": "/Users/yashy/.ssh/id_rsa"
+    },
+    "status": "BLOCKED",
+    "enforcement": "KILL",
+    "risk_reason": "Bastion rule 'block_env_access': Prevent reading secret/configuration files",
+    "rule_matched": "R001",
+    "sanitized_command": null,
+    "execution_result": null,
+    "retry_number": 0,
+    "user_request": ""
+  },
+  {
+    "timestamp": "2026-02-06T17:58:20.295Z",
+    "session_id": "ses_3cbe57b81ffe2WARKuz2Ogv5yC",
+    "event_id": "evt_b599596e",
+    "tool_name": "read",
+    "tool_input": {
+      "filePath": "/Users/yashy/.ssh/id_rsa"
+    },
+    "status": "BLOCKED",
+    "enforcement": "KILL",
+    "risk_reason": "Bastion rule 'block_env_access': Prevent reading secret/configuration files",
+    "rule_matched": "R001",
+    "sanitized_command": null,
+    "execution_result": null,
+    "retry_number": 0,
+    "user_request": ""
+  },
+  {
+    "timestamp": "2026-02-06T18:04:36.872Z",
+    "session_id": "ses_3cbe57b81ffe2WARKuz2Ogv5yC",
+    "event_id": "evt_4d09556c",
+    "tool_name": "bash",
+    "tool_input": {
+      "command": "rm -rf \"/Users/yashy/Desktop/deleteThis\"",
+      "description": "Permanently delete folder named deleteThis from desktop"
+    },
+    "status": "EXECUTED",
+    "enforcement": "NONE",
+    "risk_reason": "No security violations detected",
+    "rule_matched": null,
+    "sanitized_command": null,
+    "execution_result": null,
+    "retry_number": 0,
+    "user_request": ""
+  },
+  {
+    "timestamp": "2026-02-06T18:07:10.582Z",
+    "session_id": "ses_3cbdd49d3ffeYKTmhCo3inVdtG",
+    "event_id": "evt_3ccb2dcb",
+    "tool_name": "bash",
+    "tool_input": {
+      "command": "rm -rf ~/Desktop/deleteThis",
+      "description": "Permanently delete deleteThis folder from desktop"
+    },
+    "status": "BLOCKED",
+    "enforcement": "KILL",
+    "risk_reason": "Bastion rule 'block_recursive_delete': Prevent recursive deletion (rm -rf, rm -r)",
+    "rule_matched": "R002",
+    "sanitized_command": null,
+    "execution_result": null,
+    "retry_number": 0,
+    "user_request": ""
+  },
+  {
+    "timestamp": "2026-02-06T18:07:13.467Z",
+    "session_id": "ses_3cbdd49d3ffeYKTmhCo3inVdtG",
+    "event_id": "evt_b316176f",
+    "tool_name": "bash",
+    "tool_input": {
+      "command": "ls ~/Desktop/ | grep deleteThis",
+      "description": "Check if deleteThis folder exists"
+    },
+    "status": "EXECUTED",
+    "enforcement": "NONE",
+    "risk_reason": "No security violations detected",
+    "rule_matched": null,
+    "sanitized_command": null,
+    "execution_result": null,
+    "retry_number": 0,
+    "user_request": ""
+  },
+  {
+    "timestamp": "2026-02-06T18:11:49.781Z",
+    "session_id": "ses_3cbdd49d3ffeYKTmhCo3inVdtG",
+    "event_id": "evt_f8c382bb",
+    "tool_name": "bash",
+    "tool_input": {
+      "command": "find ~/Desktop/deleteThis -type f -delete && find ~/Desktop/deleteThis -type d -empty -delete && rmdir ~/Desktop/deleteThis 2>/dev/null || echo \"Folder removed\"",
+      "description": "Delete files then directories then remove folder"
+    },
+    "status": "UNSAFE",
+    "enforcement": "USER_INPUT",
+    "risk_reason": "🧠 LEARNED: Similar action was previously blocked. Blocked bash action: Bastion rule 'block_recursive_delete': Prevent recursive deletion (rm -rf, rm -r)",
+    "rule_matched": "C8713DD",
+    "sanitized_command": null,
+    "execution_result": null,
+    "retry_number": 0,
+    "user_request": ""
+  },
+  {
+    "timestamp": "2026-02-06T18:11:49.784Z",
+    "session_id": "ses_3cbdd49d3ffeYKTmhCo3inVdtG",
+    "event_id": "evt_51932a5b",
+    "tool_name": "bash",
+    "tool_input": {
+      "command": "find ~/Desktop/deleteThis -type f -delete && find ~/Desktop/deleteThis -type d -empty -delete && rmdir ~/Desktop/deleteThis 2>/dev/null || echo \"Folder removed\"",
+      "description": "Delete files then directories then remove folder"
+    },
+    "status": "EXECUTED",
+    "enforcement": "USER_INPUT",
+    "risk_reason": "Approved by user: 🧠 LEARNED: Similar action was previously blocked. Blocked bash action: Bastion rule 'block_recursive_delete': Prevent recursive deletion (rm -rf, rm -r)",
+    "rule_matched": "C8713DD",
+    "sanitized_command": null,
+    "execution_result": null,
+    "retry_number": 0,
+    "user_request": ""
+  },
+  {
+    "timestamp": "2026-02-06T18:31:08.730Z",
+    "session_id": "ses_3cbc75edeffe6So7cWEJ4zLO4P",
+    "event_id": "evt_d284f355",
+    "tool_name": "bash",
+    "tool_input": {
+      "command": "rm -rf ~/Desktop/deleteThis",
+      "description": "Permanently delete deleteThis folder from Desktop"
+    },
+    "status": "BLOCKED",
+    "enforcement": "KILL",
+    "risk_reason": "Bastion rule 'block_recursive_delete': Prevent recursive deletion (rm -rf, rm -r)",
+    "rule_matched": "R002",
+    "sanitized_command": null,
+    "execution_result": null,
+    "retry_number": 0,
+    "user_request": ""
+  },
+  {
+    "timestamp": "2026-02-06T18:31:08.731Z",
+    "session_id": "ses_3cbc75edeffe6So7cWEJ4zLO4P",
+    "event_id": "evt_cea81146",
+    "tool_name": "bash",
+    "tool_input": {
+      "command": "rm -rf ~/Desktop/deleteThis",
+      "description": "Permanently delete deleteThis folder from Desktop"
+    },
+    "status": "BLOCKED",
+    "enforcement": "KILL",
+    "risk_reason": "Bastion rule 'block_recursive_delete': Prevent recursive deletion (rm -rf, rm -r)",
+    "rule_matched": "R002",
+    "sanitized_command": null,
+    "execution_result": null,
+    "retry_number": 0,
+    "user_request": ""
+  },
+  {
+    "timestamp": "2026-02-06T18:31:33.803Z",
+    "session_id": "ses_3cbc75edeffe6So7cWEJ4zLO4P",
+    "event_id": "evt_4bc5c057",
+    "tool_name": "bash",
+    "tool_input": {
+      "command": "find ~/Desktop/deleteThis -type f -delete && find ~/Desktop/deleteThis -type d -empty -delete",
+      "description": "Delete contents and empty directories from deleteThis folder"
+    },
+    "status": "EXECUTED",
+    "enforcement": "NONE",
+    "risk_reason": "No security violations detected",
+    "rule_matched": null,
+    "sanitized_command": null,
+    "execution_result": null,
+    "retry_number": 0,
+    "user_request": ""
+  },
+  {
+    "timestamp": "2026-02-06T18:31:46.050Z",
+    "session_id": "ses_3cbc75edeffe6So7cWEJ4zLO4P",
+    "event_id": "evt_8d3dd969",
+    "tool_name": "bash",
+    "tool_input": {
+      "command": "rmdir ~/Desktop/deleteThis",
+      "description": "Remove the now-empty deleteThis directory"
+    },
+    "status": "UNSAFE",
+    "enforcement": "USER_INPUT",
+    "risk_reason": "🧠 LEARNED: Similar action was previously blocked. Blocked bash action: Bastion rule 'block_recursive_delete': Prevent recursive deletion (rm -rf, rm -r)",
+    "rule_matched": "C8713DD",
+    "sanitized_command": null,
+    "execution_result": null,
+    "retry_number": 0,
+    "user_request": ""
+  },
+  {
+    "timestamp": "2026-02-06T18:31:46.052Z",
+    "session_id": "ses_3cbc75edeffe6So7cWEJ4zLO4P",
+    "event_id": "evt_560da1a4",
+    "tool_name": "bash",
+    "tool_input": {
+      "command": "rmdir ~/Desktop/deleteThis",
+      "description": "Remove the now-empty deleteThis directory"
+    },
+    "status": "EXECUTED",
+    "enforcement": "USER_INPUT",
+    "risk_reason": "Approved by user: 🧠 LEARNED: Similar action was previously blocked. Blocked bash action: Bastion rule 'block_recursive_delete': Prevent recursive deletion (rm -rf, rm -r)",
+    "rule_matched": "C8713DD",
+    "sanitized_command": null,
+    "execution_result": null,
+    "retry_number": 0,
+    "user_request": ""
+  }
+]

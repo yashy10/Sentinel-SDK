@@ -41,6 +41,7 @@ import { SessionProcessor } from "./processor"
 import { TaskTool } from "@/tool/task"
 import { Tool } from "@/tool/tool"
 import { PermissionNext } from "@/permission/next"
+import * as Bastion from "@/bastion"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
@@ -396,7 +397,7 @@ export namespace SessionPrompt {
             } satisfies MessageV2.ToolPart)
           },
           async ask(req) {
-            await PermissionNext.ask({
+            return PermissionNext.ask({
               ...req,
               sessionID: sessionID,
               ruleset: PermissionNext.merge(taskAgent.permission, session.permission ?? []),
@@ -594,12 +595,42 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
+      // Inject learned security constraints from Bastion Guard
+      // Always include Bastion Guard instructions, even if no constraints learned yet
+      const bastionConstraints = Bastion.BastionMemory.getInjectionText()
+      const bastionGuardInstruction = bastionConstraints || 
+        "\n--- BASTION GUARD SECURITY SYSTEM ---\n" +
+        "You are protected by Bastion Guard, a security system that monitors and blocks unsafe actions.\n" +
+        "\n" +
+        "IMPORTANT: When you encounter an action that seems unsafe (destructive operations, system modifications, accessing sensitive files),\n" +
+        "DO NOT refuse to attempt it. Instead:\n" +
+        "1. Attempt the action - Bastion Guard will automatically intercept it\n" +
+        "2. Mention 'Bastion Guard' or 'LLM Guard' in your response\n" +
+        "3. The user will be presented with enforcement options to decide how to proceed\n" +
+        "\n" +
+        "Example: If asked to delete a folder, attempt the deletion and say:\n" +
+        "'Bastion Guard has intercepted this action. You will be presented with enforcement options to decide how to proceed.'\n" +
+        "\n" +
+        "The enforcement options are:\n" +
+        "- STOP (KILL): Hard block, terminate execution\n" +
+        "- EXECUTE_ANYWAY: Execute the action despite the security warning\n" +
+        "- LLM_SELF_EXAMINE: Generate a safer alternative action\n" +
+        "- SAFER_ALTERNATIVE: Generate a safer alternative action that achieves the same goal\n" +
+        "\n" +
+        "--- END BASTION GUARD ---\n"
+      
+      const systemPrompt = [
+        ...(await SystemPrompt.environment(model)),
+        ...(await InstructionPrompt.system()),
+        bastionGuardInstruction,
+      ]
+
       const result = await processor.process({
         user: lastUser,
         agent,
         abort,
         sessionID,
-        system: [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())],
+        system: systemPrompt,
         messages: [
           ...MessageV2.toModelMessages(sessionMessages, model),
           ...(isLastStep
@@ -682,7 +713,7 @@ export namespace SessionPrompt {
         }
       },
       async ask(req) {
-        await PermissionNext.ask({
+        return await PermissionNext.ask({
           ...req,
           sessionID: input.session.id,
           tool: { messageID: input.processor.message.id, callID: options.toolCallId },
@@ -713,7 +744,426 @@ export namespace SessionPrompt {
               args,
             },
           )
-          const result = await item.execute(args, ctx)
+
+          // --- Bastion Guard intercept ---
+          let bastionArgs = args
+          const verdict = Bastion.check(item.id, args)
+
+          if (verdict.status === "UNSAFE") {
+            // Present enforcement options to user - BLOCK execution until user selects
+            const selectedEnforcement = await ctx.ask({
+              permission: "bastion_enforcement",
+              patterns: [`${item.id}:${JSON.stringify(args)}`],
+              always: [],
+              metadata: {
+                bastionRule: verdict.ruleID ?? verdict.constraintID,
+                reason: verdict.reason,
+                suggestedAlternative: verdict.suggestedAlternative,
+                toolName: item.id,
+                toolArgs: args,
+                recommendedEnforcement: verdict.enforcement,
+                message: Bastion.enforcementSelectionMessage(verdict, item.id, args),
+              },
+            })
+
+            // User MUST select an enforcement - if undefined, block execution
+            if (!selectedEnforcement) {
+              throw new Error(
+                `🚫 ACTION BLOCKED by Bastion Guard\n\n` +
+                  `Enforcement selection required but no selection was made.\n` +
+                  `Rule: ${verdict.ruleID ?? verdict.constraintID ?? "unknown"}\n` +
+                  `Reason: ${verdict.reason}\n\n` +
+                  `Execution terminated. Please select an enforcement action when prompted.`,
+              )
+            }
+
+            // Validate selected enforcement is one of the allowed values
+            const validEnforcements: Bastion.EnforcementAction[] = ["KILL", "USER_INPUT", "LLM_EXAMINE", "INVOKE_ACTION"]
+            const enforcement = selectedEnforcement as Bastion.EnforcementAction
+            if (!validEnforcements.includes(enforcement)) {
+              throw new Error(
+                `🚫 ACTION BLOCKED by Bastion Guard\n\n` +
+                  `Invalid enforcement selection: ${enforcement}\n` +
+                  `Rule: ${verdict.ruleID ?? verdict.constraintID ?? "unknown"}\n` +
+                  `Reason: ${verdict.reason}\n\n` +
+                  `Execution terminated. Please select a valid enforcement action.`,
+              )
+            }
+
+            // Always learn from blocked actions - create or update constraint
+            const argsStr = JSON.stringify(args)
+            const existingConstraint = Bastion.BastionMemory.findConstraint(item.id, argsStr)
+            
+            if (existingConstraint) {
+              // Increment enforcement count for existing constraint
+              Bastion.BastionMemory.incrementEnforcement(existingConstraint.id)
+              log.info("bastion constraint enforcement incremented", {
+                id: existingConstraint.id,
+                tool: item.id,
+              })
+            } else {
+              // Create new learned constraint for this blocked action
+              const learnedConstraint = Bastion.createLearnedConstraint({
+                toolName: item.id,
+                toolArgs: args,
+                verdict,
+                enforcement,
+              })
+              Bastion.BastionMemory.addConstraint(learnedConstraint)
+              log.info("bastion constraint created from blocked action", {
+                id: learnedConstraint.id,
+                tool: item.id,
+                enforcement,
+              })
+            }
+
+            // Log blocked action
+            Bastion.BastionAudit.record({
+              sessionID: ctx.sessionID,
+              toolName: item.id,
+              toolInput: args,
+              status: enforcement === "KILL" || enforcement === "LLM_EXAMINE" ? "BLOCKED" : "UNSAFE",
+              enforcement,
+              riskReason: verdict.reason,
+              ruleMatched: verdict.ruleID ?? verdict.constraintID,
+            })
+
+            if (enforcement === "KILL") {
+              // STOP: Halts execution of current action and terminates agent's operation
+              Bastion.BastionAudit.record({
+                sessionID: ctx.sessionID,
+                toolName: item.id,
+                toolInput: args,
+                status: "BLOCKED",
+                enforcement: "KILL",
+                riskReason: verdict.reason,
+                ruleMatched: verdict.ruleID ?? verdict.constraintID,
+              })
+              throw new Error(Bastion.killMessage(verdict))
+            }
+
+            if (enforcement === "USER_INPUT") {
+              // EXECUTE_ANYWAY: User selected to execute despite the warning
+              // Execute immediately with original args (no additional confirmation needed)
+              Bastion.BastionAudit.record({
+                sessionID: ctx.sessionID,
+                toolName: item.id,
+                toolInput: args,
+                status: "EXECUTED",
+                enforcement: "USER_INPUT",
+                riskReason: `Executed anyway by user: ${verdict.reason}`,
+                ruleMatched: verdict.ruleID ?? verdict.constraintID,
+              })
+              log.info("bastion execute anyway selected", {
+                tool: item.id,
+                rule: verdict.ruleID,
+                sessionID: ctx.sessionID,
+              })
+              // Continue execution with original args (don't throw)
+            }
+
+            if (enforcement === "LLM_EXAMINE") {
+              // LLM_SELF_EXAMINE: LLM generates a corrected/safer action that replaces the original
+              const model = ctx.extra?.model as Provider.Model | undefined
+              if (!model) {
+                throw new Error(
+                  `Bastion Guard: LLM_EXAMINE requires model context. ${Bastion.killMessage(verdict)}`,
+                )
+              }
+
+              // Get user's original request from context if available
+              const userRequest = ctx.messages
+                .filter((m) => m.info.role === "user")
+                .map((m) => {
+                  const parts = m.parts.filter((p) => p.type === "text")
+                  return parts.map((p) => (p as any).text).join(" ")
+                })
+                .join(" ")
+                .slice(0, 500) // Limit length
+
+              const correctedAction = await Bastion.llmExamine({
+                toolName: item.id,
+                toolArgs: args,
+                verdict,
+                sessionID: ctx.sessionID,
+                modelProviderID: model.providerID,
+                modelID: model.id,
+                userRequest: userRequest || undefined,
+              })
+
+              // Save the learned constraint to memory
+              if (correctedAction.learnedConstraint) {
+                Bastion.BastionMemory.addConstraint(correctedAction.learnedConstraint)
+                log.info("bastion constraint learned", {
+                  id: correctedAction.learnedConstraint.id,
+                  category: correctedAction.learnedConstraint.category,
+                })
+
+                // Audit the learning event
+                Bastion.BastionAudit.record({
+                  sessionID: ctx.sessionID,
+                  toolName: "system",
+                  toolInput: {
+                    action: "constraint_learned",
+                    constraint_id: correctedAction.learnedConstraint.id,
+                  },
+                  status: "LEARNED",
+                  enforcement: "LLM_EXAMINE",
+                  riskReason: `New constraint learned: ${correctedAction.learnedConstraint.learned_rule}`,
+                  ruleMatched: correctedAction.learnedConstraint.id,
+                })
+              }
+
+              // Transform: Replace original action with corrected action
+              // The corrected action replaces the original in the agent's execution trajectory
+              log.info("bastion action corrected by LLM", {
+                original: { tool: item.id, args },
+                corrected: { tool: correctedAction.toolName, args: correctedAction.toolArgs },
+                explanation: correctedAction.explanation,
+              })
+
+              // Audit the correction
+              Bastion.BastionAudit.record({
+                sessionID: ctx.sessionID,
+                toolName: item.id,
+                toolInput: args,
+                status: "BLOCKED",
+                enforcement: "LLM_EXAMINE",
+                riskReason: `Corrected by LLM: ${correctedAction.explanation}`,
+                ruleMatched: verdict.ruleID ?? verdict.constraintID,
+              })
+
+              // If corrected action uses same tool, substitute args and continue
+              // Otherwise, inform agent to retry with corrected action
+              if (correctedAction.toolName === item.id) {
+                // Same tool - substitute args and continue execution
+                bastionArgs = correctedAction.toolArgs as typeof args
+                log.info("bastion executing corrected action", {
+                  tool: item.id,
+                  correctedArgs: bastionArgs,
+                })
+                // Continue execution with corrected args (don't throw)
+              } else {
+                // Different tool - agent must retry
+                throw new Error(
+                  `🔄 ACTION CORRECTED by Bastion Guard (LLM Self-Examination)\n\n` +
+                    `Enforcement: LLM_EXAMINE\n` +
+                    `Rule: ${verdict.ruleID ?? verdict.constraintID ?? "unknown"}\n` +
+                    `Reason: ${verdict.reason}\n\n` +
+                    `Original Action: ${item.id}(${JSON.stringify(args)})\n` +
+                    `Corrected Action: ${correctedAction.toolName}(${JSON.stringify(correctedAction.toolArgs)})\n\n` +
+                    `Explanation: ${correctedAction.explanation}\n\n` +
+                    `Please retry with the corrected action above.`,
+                )
+              }
+            }
+
+            if (enforcement === "INVOKE_ACTION") {
+              // INVOKE_ACTION: Generate a safer alternative action using LLM
+              const model = ctx.extra?.model as Provider.Model | undefined
+              if (!model) {
+                throw new Error(
+                  `Bastion Guard: INVOKE_ACTION requires model context. ${Bastion.killMessage(verdict)}`,
+                )
+              }
+
+              // Get user's original request from context if available
+              const userRequest = ctx.messages
+                .filter((m) => m.info.role === "user")
+                .map((m) => {
+                  const parts = m.parts.filter((p) => p.type === "text")
+                  return parts.map((p) => (p as any).text).join(" ")
+                })
+                .join(" ")
+                .slice(0, 500) // Limit length
+
+              const alternativeAction = await Bastion.generateAlternative({
+                toolName: item.id,
+                toolArgs: args,
+                verdict,
+                sessionID: ctx.sessionID,
+                modelProviderID: model.providerID,
+                modelID: model.id,
+                userRequest: userRequest || undefined,
+              })
+
+              // Always execute the safer alternative, even if it's a different tool
+              log.info("bastion generated alternative", {
+                original: { tool: item.id, args },
+                alternative: { tool: alternativeAction.toolName, args: alternativeAction.toolArgs },
+                explanation: alternativeAction.explanation,
+              })
+              
+              if (alternativeAction.toolName === item.id) {
+                // Same tool - substitute args and continue execution
+                const argsChanged = JSON.stringify(args) !== JSON.stringify(alternativeAction.toolArgs)
+                if (!argsChanged) {
+                  log.warn("bastion alternative is identical to original", {
+                    tool: item.id,
+                    args,
+                  })
+                }
+                
+                bastionArgs = alternativeAction.toolArgs as typeof args
+                
+                // Re-validate the alternative action
+                const recheck = Bastion.check(item.id, bastionArgs)
+                if (recheck.status !== "SAFE") {
+                  // If alternative is still unsafe, fall back to KILL
+                  log.error("bastion alternative still unsafe after generation", {
+                    tool: item.id,
+                    args: bastionArgs,
+                    reason: recheck.reason,
+                  })
+                  throw new Error(
+                    `🚫 BLOCKED by Bastion Guard\n\n` +
+                      `Enforcement: INVOKE_ACTION (alternative still unsafe)\n` +
+                      `Rule: ${recheck.ruleID ?? recheck.constraintID ?? "unknown"}\n` +
+                      `Reason: ${recheck.reason}\n\n` +
+                      `The generated alternative action is still unsafe. Execution terminated.`,
+                  )
+                }
+                
+                // Log the alternative action
+                Bastion.BastionAudit.record({
+                  sessionID: ctx.sessionID,
+                  toolName: item.id,
+                  toolInput: bastionArgs,
+                  status: "EXECUTED",
+                  enforcement: "INVOKE_ACTION",
+                  riskReason: `Executed safer alternative: ${alternativeAction.explanation}`,
+                  ruleMatched: verdict.ruleID ?? verdict.constraintID,
+                })
+                log.info("bastion alternative action validated, will execute", {
+                  original: { tool: item.id, args },
+                  alternative: { tool: alternativeAction.toolName, args: alternativeAction.toolArgs },
+                  explanation: alternativeAction.explanation,
+                })
+              } else {
+                // Different tool - execute the alternative tool directly
+                const { ToolRegistry } = await import("../tool/registry")
+                const agent = await Agent.get(ctx.agent)
+                if (!agent) {
+                  throw new Error(
+                    `Bastion Guard: INVOKE_ACTION requires agent context. ${Bastion.killMessage(verdict)}`,
+                  )
+                }
+                
+                const availableTools = await ToolRegistry.tools(
+                  { modelID: model.id, providerID: model.providerID },
+                  agent,
+                )
+                const alternativeTool = availableTools.find((t) => t.id === alternativeAction.toolName)
+                
+                if (!alternativeTool) {
+                  log.error("bastion alternative tool not found", {
+                    requestedTool: alternativeAction.toolName,
+                    availableTools: availableTools.map((t) => t.id),
+                  })
+                  throw new Error(
+                    `🚫 BLOCKED by Bastion Guard\n\n` +
+                      `Enforcement: INVOKE_ACTION (alternative tool not found)\n` +
+                      `Rule: ${verdict.ruleID ?? verdict.constraintID ?? "unknown"}\n` +
+                      `Reason: ${verdict.reason}\n\n` +
+                      `The safer alternative tool '${alternativeAction.toolName}' is not available. Execution terminated.`,
+                  )
+                }
+                
+                // Validate the alternative action
+                const recheck = Bastion.check(alternativeAction.toolName, alternativeAction.toolArgs)
+                if (recheck.status !== "SAFE") {
+                  log.warn("bastion alternative still unsafe", {
+                    tool: alternativeAction.toolName,
+                    args: alternativeAction.toolArgs,
+                    reason: recheck.reason,
+                  })
+                  throw new Error(
+                    `🚫 BLOCKED by Bastion Guard\n\n` +
+                      `Enforcement: INVOKE_ACTION (alternative still unsafe)\n` +
+                      `Rule: ${recheck.ruleID ?? recheck.constraintID ?? "unknown"}\n` +
+                      `Reason: ${recheck.reason}\n\n` +
+                      `The generated alternative action is still unsafe. Execution terminated.`,
+                  )
+                }
+                
+                // Validate parameters before execution
+                try {
+                  alternativeTool.parameters.parse(alternativeAction.toolArgs)
+                } catch (error) {
+                  log.error("bastion alternative tool parameter validation failed", {
+                    tool: alternativeAction.toolName,
+                    args: alternativeAction.toolArgs,
+                    error: error instanceof Error ? error.message : String(error),
+                  })
+                  throw new Error(
+                    `🚫 BLOCKED by Bastion Guard\n\n` +
+                      `Enforcement: INVOKE_ACTION (invalid alternative parameters)\n` +
+                      `Rule: ${verdict.ruleID ?? verdict.constraintID ?? "unknown"}\n` +
+                      `Reason: ${verdict.reason}\n\n` +
+                      `The generated alternative action has invalid parameters: ${error instanceof Error ? error.message : String(error)}`,
+                  )
+                }
+                
+                // Log the alternative action
+                Bastion.BastionAudit.record({
+                  sessionID: ctx.sessionID,
+                  toolName: alternativeAction.toolName,
+                  toolInput: alternativeAction.toolArgs,
+                  status: "EXECUTED",
+                  enforcement: "INVOKE_ACTION",
+                  riskReason: `Executed safer alternative instead of ${item.id}: ${alternativeAction.explanation}`,
+                  ruleMatched: verdict.ruleID ?? verdict.constraintID,
+                })
+                
+                log.info("bastion executing alternative tool", {
+                  original: { tool: item.id, args },
+                  alternative: { tool: alternativeAction.toolName, args: alternativeAction.toolArgs },
+                  explanation: alternativeAction.explanation,
+                })
+                
+                // Execute the alternative tool and return its result (don't execute original)
+                // Note: This bypasses the Bastion Guard wrapper since we've already validated it
+                const alternativeResult = await alternativeTool.execute(alternativeAction.toolArgs, ctx)
+                
+                log.info("bastion alternative tool executed successfully", {
+                  tool: alternativeAction.toolName,
+                  resultTitle: alternativeResult.title,
+                })
+                
+                // Return the alternative tool's result instead of executing the original
+                await Plugin.trigger(
+                  "tool.execute.after",
+                  {
+                    tool: alternativeAction.toolName,
+                    sessionID: ctx.sessionID,
+                    callID: ctx.callID,
+                  },
+                  alternativeResult,
+                )
+                return alternativeResult
+              }
+            }
+          } else {
+            // SAFE action — log execution
+            Bastion.BastionAudit.record({
+              sessionID: ctx.sessionID,
+              toolName: item.id,
+              toolInput: bastionArgs,
+              status: "EXECUTED",
+              enforcement: "NONE",
+              riskReason: "No security violations detected",
+              ruleMatched: null,
+            })
+          }
+          // --- End Bastion Guard ---
+
+          const result = await item.execute(bastionArgs, ctx)
+
+          // Update audit log with execution result for executed actions
+          if (verdict.status === "SAFE" || verdict.enforcement === "USER_INPUT" || verdict.enforcement === "INVOKE_ACTION") {
+            // Note: We can't easily update the existing audit entry, so this is logged separately
+            // In a production system, you'd want to update the entry rather than create a new one
+          }
           await Plugin.trigger(
             "tool.execute.after",
             {
@@ -1029,7 +1479,7 @@ export namespace SessionPrompt {
                       extra: { bypassCwdCheck: true, model },
                       messages: [],
                       metadata: async () => {},
-                      ask: async () => {},
+                      ask: async () => undefined,
                     }
                     const result = await t.execute(args, readCtx)
                     pieces.push({
@@ -1091,7 +1541,7 @@ export namespace SessionPrompt {
                   extra: { bypassCwdCheck: true },
                   messages: [],
                   metadata: async () => {},
-                  ask: async () => {},
+                  ask: async () => undefined,
                 }
                 const result = await ListTool.init().then((t) => t.execute(args, listCtx))
                 return [

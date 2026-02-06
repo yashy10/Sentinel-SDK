@@ -1,0 +1,63 @@
+{
+  "version": "1.0",
+  "constraints": [
+    {
+      "id": "C8713DD",
+      "created_at": "2026-02-06T18:07:10.581Z",
+      "source_event": "Agent attempted: bash({\"command\":\"rm -rf ~/Desktop/deleteThis\",\"description\":\"Permanently delete deleteThis folder from desktop\"}) - Blocked with KILL",
+      "blocked_tool": "bash",
+      "blocked_input": "{\"command\":\"rm -rf ~/Desktop/deleteThis\",\"description\":\"Permanently delete deleteThis folder from desktop\"}",
+      "rule_triggered": "R002",
+      "learned_rule": "Blocked bash action: Bastion rule 'block_recursive_delete': Prevent recursive deletion (rm -rf, rm -r)",
+      "injection_text": "SECURITY CONSTRAINT: Do not attempt bash actions that match: {\"command\":\"rm -rf ~/Desktop/deleteThis\",\"description\":\"Permanently delete deleteThis folder from de. This was blocked because: Bastion rule 'block_recursive_delete': Prevent recursive deletion (rm -rf, rm -r)",
+      "confidence": 0.85,
+      "times_enforced": 0,
+      "category": "destructive"
+    },
+    {
+      "id": "CA320D6",
+      "created_at": "2026-02-06T18:11:49.777Z",
+      "source_event": "Agent attempted: bash({\"command\":\"find ~/Desktop/deleteThis -type f -delete && find ~/Desktop/deleteThis -type d -empty -delete && rmdir ~/Desktop/deleteThis 2>/dev/null || echo \\\"Folder removed\\\"\",\"description\":\"Delete files then directories then remove folder\"}) - Blocked with USER_INPUT",
+      "blocked_tool": "bash",
+      "blocked_input": "{\"command\":\"find ~/Desktop/deleteThis -type f -delete && find ~/Desktop/deleteThis -type d -empty -delete && rmdir ~/Desktop/deleteThis 2>/dev/null || echo \\\"Folder removed\\\"\",\"description\":\"Delete files then directories then remove folder\"}",
+      "rule_triggered": "C8713DD",
+      "learned_rule": "Blocked bash action: 🧠 LEARNED: Similar action was previously blocked. Blocked bash action: Bastion rule 'block_recursive_delete': Prevent recursive deletion (rm -rf, rm -r)",
+      "injection_text": "SECURITY CONSTRAINT: Do not attempt bash actions that match: {\"command\":\"find ~/Desktop/deleteThis -type f -delete && find ~/Desktop/deleteThis -type d -empty -d. This was blocked because: 🧠 LEARNED: Similar action was previously blocked. Blocked bash action: Bastion rule 'block_recursive_delete': Prevent recursive deletion (rm -rf, rm -r)",
+      "confidence": 0.85,
+      "times_enforced": 0,
+      "category": "unknown"
+    },
+    {
+      "id": "C8408B8",
+      "created_at": "2026-02-06T18:31:08.727Z",
+      "source_event": "Agent attempted: bash({\"command\":\"rm -rf ~/Desktop/deleteThis\",\"description\":\"Permanently delete deleteThis folder from Desktop\"}) - Blocked with KILL",
+      "blocked_tool": "bash",
+      "blocked_input": "{\"command\":\"rm -rf ~/Desktop/deleteThis\",\"description\":\"Permanently delete deleteThis folder from Desktop\"}",
+      "rule_triggered": "R002",
+      "learned_rule": "Blocked bash action: Bastion rule 'block_recursive_delete': Prevent recursive deletion (rm -rf, rm -r)",
+      "injection_text": "SECURITY CONSTRAINT: Do not attempt bash actions that match: {\"command\":\"rm -rf ~/Desktop/deleteThis\",\"description\":\"Permanently delete deleteThis folder from De. This was blocked because: Bastion rule 'block_recursive_delete': Prevent recursive deletion (rm -rf, rm -r)",
+      "confidence": 0.85,
+      "times_enforced": 0,
+      "category": "destructive"
+    },
+    {
+      "id": "CEB814C",
+      "created_at": "2026-02-06T18:31:46.049Z",
+      "source_event": "Agent attempted: bash({\"command\":\"rmdir ~/Desktop/deleteThis\",\"description\":\"Remove the now-empty deleteThis directory\"}) - Blocked with USER_INPUT",
+      "blocked_tool": "bash",
+      "blocked_input": "{\"command\":\"rmdir ~/Desktop/deleteThis\",\"description\":\"Remove the now-empty deleteThis directory\"}",
+      "rule_triggered": "C8713DD",
+      "learned_rule": "Blocked bash action: 🧠 LEARNED: Similar action was previously blocked. Blocked bash action: Bastion rule 'block_recursive_delete': Prevent recursive deletion (rm -rf, rm -r)",
+      "injection_text": "SECURITY CONSTRAINT: Do not attempt bash actions that match: {\"command\":\"rmdir ~/Desktop/deleteThis\",\"description\":\"Remove the now-empty deleteThis directory\"}. This was blocked because: 🧠 LEARNED: Similar action was previously blocked. Blocked bash action: Bastion rule 'block_recursive_delete': Prevent recursive deletion (rm -rf, rm -r)",
+      "confidence": 0.85,
+      "times_enforced": 0,
+      "category": "unknown"
+    }
+  ],
+  "metadata": {
+    "total_constraints": 4,
+    "last_updated": "2026-02-06T18:31:46.049Z",
+    "token_budget": 2000,
+    "max_constraints": 30
+  }
+}

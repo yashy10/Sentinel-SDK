@@ -1894,6 +1894,7 @@ export class Permission extends HeyApiClient {
       directory?: string
       reply?: "once" | "always" | "reject"
       message?: string
+      enforcement?: "KILL" | "USER_INPUT" | "LLM_EXAMINE" | "INVOKE_ACTION"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1906,6 +1907,7 @@ export class Permission extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "body", key: "reply" },
             { in: "body", key: "message" },
+            { in: "body", key: "enforcement" },
           ],
         },
       ],

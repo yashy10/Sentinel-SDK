@@ -31,7 +31,14 @@ export const PermissionRoutes = lazy(() =>
           requestID: z.string(),
         }),
       ),
-      validator("json", z.object({ reply: PermissionNext.Reply, message: z.string().optional() })),
+      validator(
+        "json",
+        z.object({
+          reply: PermissionNext.Reply,
+          message: z.string().optional(),
+          enforcement: PermissionNext.EnforcementAction.optional(),
+        }),
+      ),
       async (c) => {
         const params = c.req.valid("param")
         const json = c.req.valid("json")
@@ -39,6 +46,7 @@ export const PermissionRoutes = lazy(() =>
           requestID: params.requestID,
           reply: json.reply,
           message: json.message,
+          enforcement: json.enforcement,
         })
         return c.json(true)
       },
