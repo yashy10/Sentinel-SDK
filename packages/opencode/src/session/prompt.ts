@@ -42,6 +42,7 @@ import { TaskTool } from "@/tool/task"
 import { Tool } from "@/tool/tool"
 import { PermissionNext } from "@/permission/next"
 import * as Bastion from "@/bastion"
+import { notifyBastionBlock, notifyYouBlock } from "@/bastion/github-notifier"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
@@ -75,6 +76,25 @@ export namespace SessionPrompt {
       }
     },
   )
+
+  /** Maps LLM-invented tool names to real OpenCode tools and args (e.g. curl -> webfetch). */
+  function resolveBastionToolAlias(
+    requestedTool: string,
+    args: Record<string, unknown>,
+  ): { tool: string; args: Record<string, unknown> } | null {
+    const lower = requestedTool.toLowerCase()
+    const a = args as Record<string, unknown>
+    if (lower === "curl" && typeof a?.url === "string") {
+      return { tool: "webfetch", args: { url: a.url } }
+    }
+    if ((lower === "safe_script_runner" || lower === "script_runner") && typeof a?.script_url === "string") {
+      return { tool: "webfetch", args: { url: a.script_url } }
+    }
+    if ((lower === "safe_script_runner" || lower === "script_runner") && typeof a?.url === "string") {
+      return { tool: "webfetch", args: { url: a.url } }
+    }
+    return null
+  }
 
   export function assertNotBusy(sessionID: string) {
     const match = state()[sessionID]
@@ -745,11 +765,47 @@ export namespace SessionPrompt {
             },
           )
 
-          // --- Bastion Guard intercept ---
+          // --- Bastion Guard (includes You.com Security Intelligence for bash) ---
+          const youTimeoutMs = parseInt(process.env.YOU_TIMEOUT_MS ?? "5000", 10)
+          const youSignal = AbortSignal.any([AbortSignal.timeout(youTimeoutMs), ctx.abort])
+          const { verdict, youVerdictNote, youBlocked } = await Bastion.evaluate(item.id, args, youSignal)
+
+          if (youBlocked) {
+            log.warn("blocked by You.com security intelligence", {
+              tool: item.id,
+              reason: youBlocked.reason,
+              findings: youBlocked.findings,
+            })
+            notifyYouBlock(
+              youBlocked.reason,
+              youBlocked.findings,
+              youBlocked.threatKeywordsFound,
+              item.id,
+              args,
+              ctx.sessionID,
+            )
+            Bastion.BastionAudit.record({
+              sessionID: ctx.sessionID,
+              toolName: item.id,
+              toolInput: args,
+              status: "BLOCKED",
+              enforcement: "KILL",
+              riskReason: `You.com Intelligence: ${youBlocked.reason}`,
+              ruleMatched: "YOU_001",
+            })
+            throw new Error(
+              `🛡️ Blocked by You.com Security Intelligence\n\n` +
+                `Reason: ${youBlocked.reason}\n` +
+                `Findings: ${youBlocked.findings.join(", ")}\n` +
+                `Threat Keywords: ${youBlocked.threatKeywordsFound.join(", ")}\n\n` +
+                `This action was identified as unsafe by live security intelligence. Try a different approach.`,
+            )
+          }
+
           let bastionArgs = args
-          const verdict = Bastion.check(item.id, args)
 
           if (verdict.status === "UNSAFE") {
+            notifyBastionBlock(verdict, item.id, args, ctx.sessionID)
             // Present enforcement options to user - BLOCK execution until user selects
             const selectedEnforcement = await ctx.ask({
               permission: "bastion_enforcement",
@@ -966,6 +1022,18 @@ export namespace SessionPrompt {
                   `Bastion Guard: INVOKE_ACTION requires model context. ${Bastion.killMessage(verdict)}`,
                 )
               }
+              const { ToolRegistry } = await import("../tool/registry")
+              const agent = await Agent.get(ctx.agent)
+              if (!agent) {
+                throw new Error(
+                  `Bastion Guard: INVOKE_ACTION requires agent context. ${Bastion.killMessage(verdict)}`,
+                )
+              }
+              const availableTools = await ToolRegistry.tools(
+                { modelID: model.id, providerID: model.providerID },
+                agent,
+              )
+              const allowedToolNames = availableTools.map((t) => t.id)
 
               // Get user's original request from context if available
               const userRequest = ctx.messages
@@ -985,6 +1053,7 @@ export namespace SessionPrompt {
                 modelProviderID: model.providerID,
                 modelID: model.id,
                 userRequest: userRequest || undefined,
+                allowedToolNames,
               })
 
               // Always execute the safer alternative, even if it's a different tool
@@ -1041,23 +1110,30 @@ export namespace SessionPrompt {
                 })
               } else {
                 // Different tool - execute the alternative tool directly
-                const { ToolRegistry } = await import("../tool/registry")
-                const agent = await Agent.get(ctx.agent)
-                if (!agent) {
-                  throw new Error(
-                    `Bastion Guard: INVOKE_ACTION requires agent context. ${Bastion.killMessage(verdict)}`,
-                  )
+                let resolvedToolName = alternativeAction.toolName
+                let resolvedArgs = alternativeAction.toolArgs
+                // Resolve common LLM-invented names to actual tools (e.g. curl -> webfetch)
+                if (!allowedToolNames.includes(alternativeAction.toolName)) {
+                  const alias = resolveBastionToolAlias(alternativeAction.toolName, alternativeAction.toolArgs)
+                  if (alias) {
+                    resolvedToolName = alias.tool
+                    resolvedArgs = alias.args
+                    log.info("bastion alternative tool alias resolved", {
+                      requested: alternativeAction.toolName,
+                      resolved: resolvedToolName,
+                    })
+                  }
                 }
-                
-                const availableTools = await ToolRegistry.tools(
-                  { modelID: model.id, providerID: model.providerID },
-                  agent,
-                )
-                const alternativeTool = availableTools.find((t) => t.id === alternativeAction.toolName)
-                
+                // Normalize webfetch args: LLM often returns "param" instead of "url"
+                if (resolvedToolName === "webfetch" && resolvedArgs && "param" in resolvedArgs && typeof (resolvedArgs as any).param === "string" && !("url" in resolvedArgs)) {
+                  resolvedArgs = { ...resolvedArgs, url: (resolvedArgs as any).param }
+                  delete (resolvedArgs as any).param
+                }
+                let alternativeTool = availableTools.find((t) => t.id === resolvedToolName)
                 if (!alternativeTool) {
                   log.error("bastion alternative tool not found", {
                     requestedTool: alternativeAction.toolName,
+                    resolvedTool: resolvedToolName,
                     availableTools: availableTools.map((t) => t.id),
                   })
                   throw new Error(
@@ -1070,11 +1146,11 @@ export namespace SessionPrompt {
                 }
                 
                 // Validate the alternative action
-                const recheck = Bastion.check(alternativeAction.toolName, alternativeAction.toolArgs)
+                const recheck = Bastion.check(resolvedToolName, resolvedArgs)
                 if (recheck.status !== "SAFE") {
                   log.warn("bastion alternative still unsafe", {
-                    tool: alternativeAction.toolName,
-                    args: alternativeAction.toolArgs,
+                    tool: resolvedToolName,
+                    args: resolvedArgs,
                     reason: recheck.reason,
                   })
                   throw new Error(
@@ -1088,11 +1164,11 @@ export namespace SessionPrompt {
                 
                 // Validate parameters before execution
                 try {
-                  alternativeTool.parameters.parse(alternativeAction.toolArgs)
+                  alternativeTool.parameters.parse(resolvedArgs)
                 } catch (error) {
                   log.error("bastion alternative tool parameter validation failed", {
-                    tool: alternativeAction.toolName,
-                    args: alternativeAction.toolArgs,
+                    tool: resolvedToolName,
+                    args: resolvedArgs,
                     error: error instanceof Error ? error.message : String(error),
                   })
                   throw new Error(
@@ -1107,8 +1183,8 @@ export namespace SessionPrompt {
                 // Log the alternative action
                 Bastion.BastionAudit.record({
                   sessionID: ctx.sessionID,
-                  toolName: alternativeAction.toolName,
-                  toolInput: alternativeAction.toolArgs,
+                  toolName: resolvedToolName,
+                  toolInput: resolvedArgs,
                   status: "EXECUTED",
                   enforcement: "INVOKE_ACTION",
                   riskReason: `Executed safer alternative instead of ${item.id}: ${alternativeAction.explanation}`,
@@ -1117,16 +1193,16 @@ export namespace SessionPrompt {
                 
                 log.info("bastion executing alternative tool", {
                   original: { tool: item.id, args },
-                  alternative: { tool: alternativeAction.toolName, args: alternativeAction.toolArgs },
+                  alternative: { tool: resolvedToolName, args: resolvedArgs },
                   explanation: alternativeAction.explanation,
                 })
                 
                 // Execute the alternative tool and return its result (don't execute original)
                 // Note: This bypasses the Bastion Guard wrapper since we've already validated it
-                const alternativeResult = await alternativeTool.execute(alternativeAction.toolArgs, ctx)
+                const alternativeResult = await alternativeTool.execute(resolvedArgs, ctx)
                 
                 log.info("bastion alternative tool executed successfully", {
-                  tool: alternativeAction.toolName,
+                  tool: resolvedToolName,
                   resultTitle: alternativeResult.title,
                 })
                 
@@ -1134,7 +1210,7 @@ export namespace SessionPrompt {
                 await Plugin.trigger(
                   "tool.execute.after",
                   {
-                    tool: alternativeAction.toolName,
+                    tool: resolvedToolName,
                     sessionID: ctx.sessionID,
                     callID: ctx.callID,
                   },
@@ -1159,6 +1235,14 @@ export namespace SessionPrompt {
 
           const result = await item.execute(bastionArgs, ctx)
 
+          // Prepend You.com verdict note to tool output (always show whether You.com was used)
+          const outputWithNote = youVerdictNote + (result.output ?? "")
+          const resultWithNote = {
+            ...result,
+            output: outputWithNote,
+            metadata: { ...result.metadata, youVerdictNote },
+          }
+
           // Update audit log with execution result for executed actions
           if (verdict.status === "SAFE" || verdict.enforcement === "USER_INPUT" || verdict.enforcement === "INVOKE_ACTION") {
             // Note: We can't easily update the existing audit entry, so this is logged separately
@@ -1171,9 +1255,9 @@ export namespace SessionPrompt {
               sessionID: ctx.sessionID,
               callID: ctx.callID,
             },
-            result,
+            resultWithNote,
           )
-          return result
+          return resultWithNote
         },
       })
     }

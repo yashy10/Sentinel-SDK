@@ -172,12 +172,23 @@ export namespace SessionProcessor {
                 case "tool-result": {
                   const match = toolcalls[value.toolCallId]
                   if (match && match.state.status === "running") {
+                    const rawOutput = value.output.output ?? ""
+                    const youNote = value.output.metadata?.youVerdictNote as string | undefined
+                    const outputAlreadyHasNote = rawOutput.startsWith("You.com was ")
+                    const output =
+                      outputAlreadyHasNote
+                        ? rawOutput
+                        : youNote != null
+                          ? youNote + rawOutput
+                          : match.tool === "bash"
+                            ? "You.com was not used for this check.\n" + rawOutput
+                            : rawOutput
                     await Session.updatePart({
                       ...match,
                       state: {
                         status: "completed",
                         input: value.input ?? match.state.input,
-                        output: value.output.output,
+                        output,
                         metadata: value.output.metadata,
                         title: value.output.title,
                         time: {

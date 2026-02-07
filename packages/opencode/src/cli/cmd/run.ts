@@ -24,6 +24,7 @@ import { TaskTool } from "../../tool/task"
 import { SkillTool } from "../../tool/skill"
 import { BashTool } from "../../tool/bash"
 import { TodoWriteTool } from "../../tool/todo"
+import { ComposioTool } from "../../tool/composio"
 import { Locale } from "../../util/locale"
 
 type ToolProps<T extends Tool.Info> = {
@@ -181,6 +182,13 @@ function skill(info: ToolProps<typeof SkillTool>) {
   inline({
     icon: "→",
     title: `Skill "${info.input.name}"`,
+  })
+}
+
+function composio(info: ToolProps<typeof ComposioTool>) {
+  inline({
+    icon: "◇",
+    title: "Composio: list connected apps",
   })
 }
 
@@ -389,6 +397,7 @@ export const RunCommand = cmd({
         if (part.tool === "task") return task(props<typeof TaskTool>(part))
         if (part.tool === "todowrite") return todo(props<typeof TodoWriteTool>(part))
         if (part.tool === "skill") return skill(props<typeof SkillTool>(part))
+        if (part.tool === "composio") return composio(props<typeof ComposioTool>(part))
         return fallback(part)
       }
 

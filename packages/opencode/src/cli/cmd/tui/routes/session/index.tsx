@@ -1626,7 +1626,10 @@ function Bash(props: ToolProps<typeof BashTool>) {
   const { theme } = useTheme()
   const sync = useSync()
   const isRunning = createMemo(() => props.part.state.status === "running")
-  const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
+  // Prefer part.state.output (includes You.com verdict note when completed); fall back to metadata.output
+  const output = createMemo(() =>
+    stripAnsi((props.output ?? props.metadata.output)?.trim() ?? ""),
+  )
   const [expanded, setExpanded] = createSignal(false)
   const lines = createMemo(() => output().split("\n"))
   const overflow = createMemo(() => lines().length > 10)
@@ -1662,7 +1665,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
 
   return (
     <Switch>
-      <Match when={props.metadata.output !== undefined}>
+      <Match when={(props.output ?? props.metadata.output) !== undefined}>
         <BlockTool
           title={title()}
           part={props.part}

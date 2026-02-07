@@ -292,6 +292,7 @@ export async function generateAlternative(input: {
   modelProviderID: string
   modelID: string
   userRequest?: string
+  allowedToolNames: string[]
 }): Promise<CorrectedAction> {
   try {
     const agent = await Agent.get("title")
@@ -311,6 +312,7 @@ export async function generateAlternative(input: {
       time: { created: Date.now() },
     }
 
+    const toolList = input.allowedToolNames.join(", ")
     const alternativePrompt = `You are a security analyst for an AI coding agent.
 The agent attempted an action that was blocked by our security policy.
 
@@ -324,6 +326,12 @@ ${input.userRequest ? `- User's Original Request: ${input.userRequest}` : ""}
 YOUR TASK:
 Generate a SAFER ALTERNATIVE action that achieves the same goal as the blocked action but without violating security policy.
 Focus on providing a practical, executable alternative that the user can use immediately.
+
+CRITICAL: corrected_tool MUST be exactly one of these tool names (no other names allowed): ${toolList}
+- To fetch a URL safely (instead of curl or pipe-to-shell), use: webfetch with corrected_args: { "url": "<the URL>" } — the key must be "url", not "param".
+- To run a shell command: bash with corrected_args: { "command": "...", "description": "..." }.
+- To read a file: read with corrected_args: { "path": "..." }.
+- Do not use "curl", "safe_script_runner", or any name not in the list above.
 
 Respond ONLY with a JSON object (no markdown, no backticks):
 {

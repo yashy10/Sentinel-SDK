@@ -215,8 +215,14 @@ export namespace PermissionNext {
         }
         return
       }
+      // Bastion requires an explicit enforcement; missing = default to KILL (block)
+      const enforcement =
+        existing.info.permission === "bastion_enforcement" && input.enforcement == null
+          ? ("KILL" as const)
+          : input.enforcement
+
       if (input.reply === "once") {
-        existing.resolve(input.enforcement)
+        existing.resolve(enforcement)
         return
       }
       if (input.reply === "always") {
@@ -228,7 +234,7 @@ export namespace PermissionNext {
           })
         }
 
-        existing.resolve(input.enforcement)
+        existing.resolve(enforcement)
 
         const sessionID = existing.info.sessionID
         for (const [id, pending] of Object.entries(s.pending)) {
