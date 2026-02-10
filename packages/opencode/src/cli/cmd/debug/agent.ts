@@ -162,6 +162,7 @@ async function createToolContext(agent: Agent.Info) {
           throw new PermissionNext.DeniedError(ruleset)
         }
       }
+      return undefined
     },
   }
 }

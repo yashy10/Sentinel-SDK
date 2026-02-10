@@ -37,7 +37,7 @@ type AskInput = {
 }
 
 type ToolCtx = typeof baseCtx & {
-  ask: (input: AskInput) => Promise<void>
+  ask: (input: AskInput) => Promise<undefined>
 }
 
 const execute = async (params: { patchText: string }, ctx: ToolCtx) => {
@@ -51,6 +51,7 @@ const makeCtx = () => {
     ...baseCtx,
     ask: async (input) => {
       calls.push(input)
+      return undefined
     },
   }
 

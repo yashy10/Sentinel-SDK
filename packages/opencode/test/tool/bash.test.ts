@@ -14,7 +14,7 @@ const ctx = {
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => {},
-  ask: async () => {},
+  ask: async () => undefined,
 }
 
 const projectRoot = path.join(__dirname, "../..")
@@ -51,6 +51,7 @@ describe("tool.bash permissions", () => {
           ...ctx,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
+            return undefined
           },
         }
         await bash.execute(
@@ -78,6 +79,7 @@ describe("tool.bash permissions", () => {
           ...ctx,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
+            return undefined
           },
         }
         await bash.execute(
@@ -106,6 +108,7 @@ describe("tool.bash permissions", () => {
           ...ctx,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
+            return undefined
           },
         }
         await bash.execute(
@@ -132,6 +135,7 @@ describe("tool.bash permissions", () => {
           ...ctx,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
+            return undefined
           },
         }
         await bash.execute(
@@ -165,6 +169,7 @@ describe("tool.bash permissions", () => {
           ...ctx,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
+            return undefined
           },
         }
         const filepath = path.join(outerTmp.path, "outside.txt")
@@ -195,6 +200,7 @@ describe("tool.bash permissions", () => {
           ...ctx,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
+            return undefined
           },
         }
 
@@ -225,6 +231,7 @@ describe("tool.bash permissions", () => {
           ...ctx,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
+            return undefined
           },
         }
         await bash.execute(
@@ -252,6 +259,7 @@ describe("tool.bash permissions", () => {
           ...ctx,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
+            return undefined
           },
         }
         await bash.execute(
@@ -278,6 +286,7 @@ describe("tool.bash permissions", () => {
           ...ctx,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
+            return undefined
           },
         }
         await bash.execute({ command: "cat > /tmp/output.txt", description: "Redirect ls output" }, testCtx)
@@ -299,6 +308,7 @@ describe("tool.bash permissions", () => {
           ...ctx,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
+            return undefined
           },
         }
         await bash.execute({ command: "ls -la", description: "List" }, testCtx)

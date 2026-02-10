@@ -87,6 +87,7 @@ Use this skill.
             ...baseCtx,
             ask: async (req) => {
               requests.push(req)
+              return undefined
             },
           }
 

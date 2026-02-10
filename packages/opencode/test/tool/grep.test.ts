@@ -12,7 +12,7 @@ const ctx = {
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => {},
-  ask: async () => {},
+  ask: async () => undefined,
 }
 
 const projectRoot = path.join(__dirname, "../..")

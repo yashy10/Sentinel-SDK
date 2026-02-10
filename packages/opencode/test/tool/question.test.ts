@@ -11,7 +11,7 @@ const ctx = {
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => {},
-  ask: async () => {},
+  ask: async () => undefined,
 }
 
 describe("tool.question", () => {

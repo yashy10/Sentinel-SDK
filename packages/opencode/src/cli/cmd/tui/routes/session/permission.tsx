@@ -303,7 +303,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                     })()
                   : { once: "Allow once", always: "Allow always", reject: "Reject" }
               }
-              escapeKey={(props.request.permission === "bastion_enforcement" ? undefined : "reject") as keyof T | undefined}
+              escapeKey={(props.request.permission === "bastion_enforcement" ? undefined : "reject") as any}
               fullscreen
               onSelect={(option) => {
                 if (props.request.permission === "bastion_enforcement") {

@@ -13,7 +13,7 @@ const ctx = {
   abort: new AbortController().signal,
   messages: [],
   metadata: () => {},
-  ask: async () => {},
+  ask: async () => undefined,
 }
 
 const MB = 1024 * 1024

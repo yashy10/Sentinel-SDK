@@ -22,6 +22,7 @@ describe("tool.assertExternalDirectory", () => {
       ...baseCtx,
       ask: async (req) => {
         requests.push(req)
+        return undefined
       },
     }
 
@@ -41,6 +42,7 @@ describe("tool.assertExternalDirectory", () => {
       ...baseCtx,
       ask: async (req) => {
         requests.push(req)
+        return undefined
       },
     }
 
@@ -60,6 +62,7 @@ describe("tool.assertExternalDirectory", () => {
       ...baseCtx,
       ask: async (req) => {
         requests.push(req)
+        return undefined
       },
     }
 
@@ -86,6 +89,7 @@ describe("tool.assertExternalDirectory", () => {
       ...baseCtx,
       ask: async (req) => {
         requests.push(req)
+        return undefined
       },
     }
 
@@ -112,6 +116,7 @@ describe("tool.assertExternalDirectory", () => {
       ...baseCtx,
       ask: async (req) => {
         requests.push(req)
+        return undefined
       },
     }
 

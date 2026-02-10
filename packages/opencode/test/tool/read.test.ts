@@ -16,7 +16,7 @@ const ctx = {
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => {},
-  ask: async () => {},
+  ask: async () => undefined,
 }
 
 describe("tool.read external_directory permission", () => {
@@ -68,6 +68,7 @@ describe("tool.read external_directory permission", () => {
           ...ctx,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
+            return undefined
           },
         }
         await read.execute({ filePath: path.join(outerTmp.path, "secret.txt") }, testCtx)
@@ -89,6 +90,7 @@ describe("tool.read external_directory permission", () => {
           ...ctx,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
+            return undefined
           },
         }
         // This will fail because file doesn't exist, but we can check if permission was asked
@@ -115,6 +117,7 @@ describe("tool.read external_directory permission", () => {
           ...ctx,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
+            return undefined
           },
         }
         await read.execute({ filePath: path.join(tmp.path, "internal.txt") }, testCtx)
@@ -158,6 +161,7 @@ describe("tool.read env file permissions", () => {
                   throw new PermissionNext.DeniedError(agent.permission)
                 }
               }
+              return undefined
             },
           }
           const read = await ReadTool.init()
