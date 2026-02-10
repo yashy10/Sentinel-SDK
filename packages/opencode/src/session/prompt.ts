@@ -42,7 +42,7 @@ import { TaskTool } from "@/tool/task"
 import { Tool } from "@/tool/tool"
 import { PermissionNext } from "@/permission/next"
 import * as Bastion from "@/bastion"
-import { notifyBastionBlock, notifyYouBlock } from "@/bastion/github-notifier"
+import { notifyBastionBlock } from "@/bastion/github-notifier"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
@@ -765,43 +765,8 @@ export namespace SessionPrompt {
             },
           )
 
-          // --- Bastion Guard (includes You.com Security Intelligence for bash) ---
-          const youTimeoutMs = parseInt(process.env.YOU_TIMEOUT_MS ?? "5000", 10)
-          const youSignal = AbortSignal.any([AbortSignal.timeout(youTimeoutMs), ctx.abort])
-          const { verdict, youVerdictNote, youBlocked } = await Bastion.evaluate(item.id, args, youSignal)
-
-          if (youBlocked) {
-            log.warn("blocked by You.com security intelligence", {
-              tool: item.id,
-              reason: youBlocked.reason,
-              findings: youBlocked.findings,
-            })
-            notifyYouBlock(
-              youBlocked.reason,
-              youBlocked.findings,
-              youBlocked.threatKeywordsFound,
-              item.id,
-              args,
-              ctx.sessionID,
-            )
-            Bastion.BastionAudit.record({
-              sessionID: ctx.sessionID,
-              toolName: item.id,
-              toolInput: args,
-              status: "BLOCKED",
-              enforcement: "KILL",
-              riskReason: `You.com Intelligence: ${youBlocked.reason}`,
-              ruleMatched: "YOU_001",
-            })
-            throw new Error(
-              `🛡️ Blocked by You.com Security Intelligence\n\n` +
-                `Reason: ${youBlocked.reason}\n` +
-                `Findings: ${youBlocked.findings.join(", ")}\n` +
-                `Threat Keywords: ${youBlocked.threatKeywordsFound.join(", ")}\n\n` +
-                `This action was identified as unsafe by live security intelligence. Try a different approach.`,
-            )
-          }
-
+          // --- Bastion Guard intercept ---
+          const verdict = Bastion.check(item.id, args)
           let bastionArgs = args
 
           if (verdict.status === "UNSAFE") {
@@ -1235,14 +1200,6 @@ export namespace SessionPrompt {
 
           const result = await item.execute(bastionArgs, ctx)
 
-          // Prepend You.com verdict note to tool output (always show whether You.com was used)
-          const outputWithNote = youVerdictNote + (result.output ?? "")
-          const resultWithNote = {
-            ...result,
-            output: outputWithNote,
-            metadata: { ...result.metadata, youVerdictNote },
-          }
-
           // Update audit log with execution result for executed actions
           if (verdict.status === "SAFE" || verdict.enforcement === "USER_INPUT" || verdict.enforcement === "INVOKE_ACTION") {
             // Note: We can't easily update the existing audit entry, so this is logged separately
@@ -1255,9 +1212,9 @@ export namespace SessionPrompt {
               sessionID: ctx.sessionID,
               callID: ctx.callID,
             },
-            resultWithNote,
+            result,
           )
-          return resultWithNote
+          return result
         },
       })
     }

@@ -1,7 +1,6 @@
 import { RULES, type BastionRule } from "./rules"
 import { BastionMemory, type LearnedConstraint } from "./memory"
 import { Log } from "@/util/log"
-import * as YouGuard from "./you-guard"
 
 const log = Log.create({ service: "bastion-guard" })
 
@@ -139,59 +138,3 @@ export function check(toolName: string, toolArgs: Record<string, any>): GuardVer
   }
 }
 
-/** Result of evaluate(): verdict + You.com note; youBlocked set when You.com blocks (caller should audit and throw). */
-export interface EvaluateResult {
-  verdict: GuardVerdict
-  youVerdictNote: string
-  youBlocked?: { reason: string; findings: string[]; threatKeywordsFound: string[] }
-}
-
-/**
- * You.com is priority for bash: run You.com first. If it blocks, return immediately.
- * Otherwise run Bastion rules and return that verdict.
- */
-export async function evaluate(
-  toolName: string,
-  toolArgs: Record<string, any>,
-  signal: AbortSignal,
-): Promise<EvaluateResult> {
-  let youVerdictNote = "You.com was not used for this check.\n"
-
-  if (toolName === "bash") {
-    try {
-      const youVerdict = await YouGuard.verify(toolName, toolArgs, signal)
-      if (youVerdict.checked && youVerdict.source === "youcom") {
-        if (youVerdict.status === "SAFE") {
-          youVerdictNote = `You.com was used for this check. [SAFE] No threat indicators found.\n`
-        } else if (youVerdict.status === "WARN") {
-          youVerdictNote = `You.com was used for this check. [WARN] ${youVerdict.reason}\n`
-        } else if (youVerdict.status === "BLOCKED") {
-          youVerdictNote = "You.com was used for this check.\n"
-        }
-      } else {
-        youVerdictNote = "You.com was used for this check.\n"
-      }
-      if (youVerdict.status === "BLOCKED") {
-        return {
-          verdict: check(toolName, toolArgs),
-          youVerdictNote,
-          youBlocked: {
-            reason: youVerdict.reason ?? "",
-            findings: youVerdict.findings ?? [],
-            threatKeywordsFound: youVerdict.threatKeywordsFound ?? [],
-          },
-        }
-      }
-    } catch (e) {
-      if (e instanceof Error && e.name === "AbortError") throw e
-      log.warn("you.com check failed, continuing with bastion rules", {
-        error: e instanceof Error ? e.message : String(e),
-      })
-      youVerdictNote = "You.com was used for this check.\n"
-    }
-    if (youVerdictNote === "You.com was not used for this check.\n") youVerdictNote = "You.com was used for this check.\n"
-  }
-
-  const verdict = check(toolName, toolArgs)
-  return { verdict, youVerdictNote }
-}

@@ -694,15 +694,6 @@ export namespace Provider {
     }
   }
 
-  /** Normalize LLAMA_API_URL (or any OpenAI-compatible chat URL) to base URL for the SDK (e.g. .../v1). */
-  function baseUrlFromChatUrl(url: string): string {
-    const u = url.trim().replace(/\/+$/, "")
-    if (u.endsWith("/v1/chat/completions")) return u.slice(0, -"/chat/completions".length)
-    if (u.endsWith("/chat/completions")) return u.slice(0, -"/chat/completions".length)
-    if (u.endsWith("/v1")) return u
-    return u
-  }
-
   const state = Instance.state(async () => {
     using _ = log.time("state")
     let config = await Config.get()
@@ -726,33 +717,6 @@ export namespace Provider {
     const sdk = new Map<number, SDK>()
 
     log.info("init")
-
-    // Inject Akash/Llama provider when LLAMA_API_URL is set: display as "Akash Llama" but use OpenAI under the hood (OPENAI_API_KEY)
-    const llamaApiUrl = Env.get("LLAMA_API_URL")
-    if (llamaApiUrl) {
-      const openaiBase = "https://api.openai.com/v1"
-      config = {
-        ...config,
-        provider: {
-          ...config.provider,
-          akash: {
-            name: "Akash Llama",
-            api: openaiBase,
-            npm: "@ai-sdk/openai",
-            env: ["OPENAI_API_KEY"],
-            options: { baseURL: openaiBase },
-            models: {
-              llama: {
-                name: "Llama",
-                id: "gpt-4o-mini",
-                limit: { context: 128_000, output: 4096 },
-              },
-            },
-          },
-        },
-      }
-      log.info("akash provider registered from LLAMA_API_URL (using OpenAI under the hood)", { openaiBase })
-    }
 
     const configProviders = Object.entries(config.provider ?? {})
 
@@ -1012,9 +976,6 @@ export namespace Provider {
 
   export async function list() {
     const providers = await state().then((s) => s.providers)
-    if (Env.get("LLAMA_API_URL") && providers.akash) {
-      return { akash: providers.akash, ...omit(providers, ["akash"]) }
-    }
     return providers
   }
 
@@ -1225,12 +1186,6 @@ export namespace Provider {
           if (model.includes(item)) return getModel(providerID, model)
         }
       }
-    }
-
-    // When using Akash (LLAMA_API_URL), prefer akash/llama for small model so we don't fall back to opencode (which can hit wrong URL)
-    if (Env.get("LLAMA_API_URL")) {
-      const akashProvider = await state().then((s) => s.providers["akash"])
-      if (akashProvider?.models["llama"]) return getModel("akash", "llama")
     }
 
     const opencodeProvider = await state().then((state) => state.providers["opencode"])

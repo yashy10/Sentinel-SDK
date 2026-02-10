@@ -1,4 +1,4 @@
-export { check, evaluate, type GuardVerdict, type VerdictStatus, type EnforcementAction, type EvaluateResult } from "./guard"
+export { check, type GuardVerdict, type VerdictStatus, type EnforcementAction } from "./guard"
 export { BastionMemory, type LearnedConstraint } from "./memory"
 export { BastionAudit, type AuditEntry } from "./audit"
 export {
@@ -15,5 +15,3 @@ export {
   type CorrectedAction,
 } from "./enforcement"
 export { RULES, type BastionRule } from "./rules"
-export * as YouGuard from "./you-guard"
-export type { YouVerdict } from "./you-guard"

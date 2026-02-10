@@ -1626,7 +1626,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
   const { theme } = useTheme()
   const sync = useSync()
   const isRunning = createMemo(() => props.part.state.status === "running")
-  // Prefer part.state.output (includes You.com verdict note when completed); fall back to metadata.output
+  // Prefer part.state.output when completed; fall back to metadata.output
   const output = createMemo(() =>
     stripAnsi((props.output ?? props.metadata.output)?.trim() ?? ""),
   )

@@ -23,7 +23,7 @@ function setEnv(overrides: Record<string, string | undefined>) {
 beforeEach(() => {
   setEnv({
     YOU_ENABLED: "true",
-    YOU_API_KEY: "ydc-sk-test-key",
+    YOU_API_KEY: "ydc-sk-398a109522d9704d-ba8LAtgDCmE58OjM35F1hobESoeMBEws-cc4f7e30",
     YOU_TIMEOUT_MS: "5000",
     YOU_MAX_RESULTS: "5",
   })
